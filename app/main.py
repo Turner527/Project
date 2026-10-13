@@ -6,14 +6,15 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from agent.llm import ConfigError, LLMClient, load_env, make_llm
+from agent.llm import ConfigError, LLMClient, LLMError, load_env, make_llm
 from agent.loop import Agent
 from agent.prompts import PROMPT_VERSION
 from agent.tool_adapter import ToolAdapter, make_adapter
+from app import connect as connect_mod
 from data.validation import WorkbookError
 from logs.store import STATUS_ERROR, LogStore
 from tools import datastore
@@ -39,6 +40,9 @@ def create_app(
     adapter: ToolAdapter | None = None,
     store: LogStore | None = None,
     load_env_file: bool = True,
+    env_path: Path | None = None,
+    certs_dir: Path | None = None,
+    verify=None,
 ) -> FastAPI:
     """Все зависимости можно передать снаружи (тесты); иначе они создаются из .env и окружения."""
     if load_env_file:
@@ -49,6 +53,7 @@ def create_app(
             llm = make_llm()
         except ConfigError as exc:
             llm_error = str(exc)
+    state = {"llm": llm, "error": llm_error}
     adapter = adapter or make_adapter()
     store = store or LogStore()
 
@@ -66,9 +71,9 @@ def create_app(
     @app.get("/api/status")
     def status() -> dict:
         return {
-            "llm": llm.name if llm else None,
-            "llm_error": llm_error,
-            "offline": bool(llm and llm.name == "stub"),
+            "llm": state["llm"].name if state["llm"] else None,
+            "llm_error": state["error"],
+            "offline": bool(state["llm"] and state["llm"].name == "stub"),
             "tools_backend": (os.getenv("TOOLS_BACKEND") or "mcp").lower(),
             "prompt_version": PROMPT_VERSION,
             "dataset": datastore.describe(),
@@ -76,9 +81,9 @@ def create_app(
 
     @app.post("/api/ask")
     def ask(req: AskRequest) -> dict:
-        if llm is None:
-            raise HTTPException(503, llm_error or "Языковая модель не настроена.")
-        result = Agent(llm, adapter).run(req.question.strip())
+        if state["llm"] is None:
+            raise HTTPException(503, state["error"] or "Языковая модель не настроена.")
+        result = Agent(state["llm"], adapter).run(req.question.strip())
         request_id = store.log_request(result, req.client_id)
         data = result.to_dict()
         data["request_id"] = request_id
@@ -93,6 +98,23 @@ def create_app(
         if not store.set_feedback(req.request_id, rating, req.comment):
             raise HTTPException(404, "Запрос с таким идентификатором не найден.")
         return {"ok": True}
+
+    @app.post("/api/connect")
+    def connect_gigachat(request: Request, credentials: str = Form(...), scope: str = Form(""), model: str = Form(""),
+                         ca_file: UploadFile | None = File(None)) -> JSONResponse:
+        """Проверяет ключ живым запросом и сохраняет его в .env. Только с локального адреса."""
+        if (request.client.host if request.client else "") not in connect_mod.LOCAL_HOSTS:
+            raise HTTPException(403, "Подключение из интерфейса доступно только с локального компьютера.")
+        cert = ca_file.file.read(1024 * 1024 + 1) if ca_file and ca_file.filename else None
+        if cert is not None and len(cert) > 1024 * 1024:
+            return _upload_error("Файл сертификата больше 1 МБ.", 413)
+        try:
+            new_llm = connect_mod.connect(credentials, scope, model, cert, env_path or connect_mod.ENV_PATH,
+                                          certs_dir or connect_mod.CERTS_DIR, verify or connect_mod.verify_token)
+        except LLMError as exc:
+            return JSONResponse({"ok": False, "detail": str(exc)}, status_code=422)
+        state["llm"], state["error"] = new_llm, None
+        return JSONResponse({"ok": True, "llm": new_llm.name})
 
     @app.post("/api/upload")
     def upload(file: UploadFile = File(...)) -> JSONResponse:

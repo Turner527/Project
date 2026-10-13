@@ -221,6 +221,11 @@
   .dialog .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14.5px; margin: 10px 0 14px; }
   .dialog .kv dt { color: var(--muted); } .dialog .kv dd { margin: 0; overflow-wrap: anywhere; }
 
+  .connect-form { display: grid; gap: 12px; margin: 12px 0; }
+  .connect-form label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+  .connect-form input, .connect-form select { font: inherit; font-size: 15px; color: var(--ink); background: var(--composer-bg); border: 1px solid var(--line-strong); border-radius: 13px; padding: 10px 14px; }
+  .connect-form small { color: var(--faint); font-size: 12.5px; }
+
   /* ---------- адаптив ---------- */
   @media (max-width: 960px) {
     .hero { grid-template-columns: minmax(0, 1fr); gap: 36px; padding-top: 32px; }
@@ -694,19 +699,37 @@ function showConnect() {
   const state = s.llm_error ? ["bad", "Модель не настроена"] : s.offline ? ["warn", "Работает офлайн-заглушка"] : ["ok", `Подключено: ${s.llm}`];
   const body = [el("p", {}, el("span", { class: `dot ${state[0]}`, style: "display:inline-block;margin-right:10px" }), state[1])];
   if (s.llm_error) body.push(el("div", { class: "alert bad" }, s.llm_error));
-  if (s.offline || s.llm_error) {
-    body.push(el("p", {}, "Чтобы подключить GigaChat:"),
-      el("ol", {},
-        el("li", {}, "Получите ключ авторизации в личном кабинете GigaChat API и скачайте сертификат Минцифры (см. README, шаги 3–4)."),
-        el("li", {}, "Скопируйте ", el("code", {}, ".env.example"), " в ", el("code", {}, ".env"), " и заполните ", el("code", {}, "GIGACHAT_CREDENTIALS"), " и ", el("code", {}, "GIGACHAT_CA_BUNDLE"), "."),
-        el("li", {}, "Проверьте связь: ", el("code", {}, "python check_gigachat.py")),
-        el("li", {}, "Перезапустите сервер.")),
-      el("p", {}, "Проверка SSL всегда включена — отключить её нельзя."));
-  } else {
-    body.push(el("dl", { class: "kv" }, el("dt", {}, "Версия промпта"), el("dd", {}, s.prompt_version),
-      el("dt", {}, "Инструменты"), el("dd", {}, s.tools_backend === "direct" ? "прямой вызов" : "MCP-сервер")));
-  }
-  openDialog("info", "Подключение к GigaChat", ...body);
+  const key = el("input", { type: "password", id: "key-input", autocomplete: "off", placeholder: "Ключ авторизации из личного кабинета GigaChat API" });
+  const scope = el("select", { id: "scope-input" }, ["GIGACHAT_API_PERS", "GIGACHAT_API_B2B", "GIGACHAT_API_CORP"].map((v) => el("option", { value: v }, v)));
+  const model = el("input", { type: "text", id: "model-input", placeholder: "GigaChat-2-Pro (по умолчанию)" });
+  const cert = el("input", { type: "file", id: "cert-input", accept: ".pem,.crt,.cer" });
+  const msg = el("div", { class: "alert bad hidden", id: "connect-msg" });
+  const submit = el("button", { class: "btn primary sm", type: "submit" }, "Проверить и сохранить");
+  const form = el("form", { class: "connect-form", autocomplete: "off" },
+    el("label", {}, "Ключ авторизации", key), el("label", {}, "Scope", scope), el("label", {}, "Модель (необязательно)", model),
+    el("label", {}, "Сертификат Минцифры (PEM)", cert), el("small", {}, "Нужен при первом подключении. Если сертификат уже лежит в certs/ и указан в .env, поле можно оставить пустым."),
+    msg, el("div", { class: "actions" }, submit));
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    msg.classList.add("hidden"); submit.disabled = true; submit.textContent = "Проверяю связь…";
+    const data = new FormData();
+    data.append("credentials", key.value); data.append("scope", scope.value); data.append("model", model.value);
+    if (cert.files[0]) data.append("ca_file", cert.files[0]);
+    const res = await api("/api/connect", { method: "POST", body: data });
+    submit.disabled = false; submit.textContent = "Проверить и сохранить";
+    if (res.ok) {
+      key.value = "";
+      await refreshStatus();
+      openDialog("done", "GigaChat подключён", el("p", {}, `Модель ${res.body.llm.replace(/^gigachat:/, "")} работает. Ключ сохранён в файле .env на вашем компьютере, перезапуск не нужен.`));
+    } else {
+      const d = res.body && res.body.detail;
+      msg.textContent = typeof d === "string" ? d : "Не удалось подключиться. Проверьте поля.";
+      msg.classList.remove("hidden");
+    }
+  });
+  body.push(form, el("p", {}, "Ключ проверяется живым запросом и сохраняется локально в .env. Проверка SSL всегда включена."));
+  const dialog = openDialog("info", "Подключение к GigaChat", ...body);
+  key.focus();
 }
 
 /* ---------- загрузка xlsx ---------- */
