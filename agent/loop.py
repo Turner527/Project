@@ -111,6 +111,8 @@ class Agent:
             memo, raw, error, usage = self._final(messages, functions, usage)
         except LLMError as exc:
             error = str(exc)
+        except Exception as exc:  # noqa: BLE001 — сбой инструментов или MCP тоже должен быть виден и залогирован
+            error = f"Внутренняя ошибка агента: {type(exc).__name__}: {exc}"
 
         verification = None
         if memo is not None:

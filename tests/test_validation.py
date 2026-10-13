@@ -129,3 +129,17 @@ def test_all_problems_reported_together(tmp_path, frames):
 def test_bytes_source_is_supported(frames, tmp_path):
     path = write(tmp_path, *frames)
     assert load_dataset(path.read_bytes()).months
+
+
+def test_zip_bomb_is_rejected_before_parsing(tmp_path, monkeypatch):
+    import zipfile
+
+    from data import validation
+
+    monkeypatch.setattr(validation, "MAX_UNPACKED_BYTES", 1024 * 1024)
+    bomb = tmp_path / "bomb.xlsx"
+    with zipfile.ZipFile(bomb, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("xl/worksheets/sheet1.xml", b"0" * (3 * 1024 * 1024))  # 3 МБ нулей сжимаются в килобайты
+    assert bomb.stat().st_size < 100_000
+    msg = errors_of(bomb)
+    assert "слишком большой после распаковки" in msg

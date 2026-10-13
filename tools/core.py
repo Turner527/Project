@@ -68,9 +68,11 @@ def _tool(fn: Callable) -> Callable:
 
 
 def _r(x, nd: int = 2):
-    if x is None or (isinstance(x, float) and math.isnan(x)):
+    """Округление; None, NaN и бесконечности превращаются в None (иначе JSON получился бы невалидным)."""
+    if x is None:
         return None
-    return round(float(x), nd)
+    x = float(x)
+    return round(x, nd) if math.isfinite(x) else None
 
 
 # ---------- сопоставление названий (лёгкая «стемминг»-нормализация по первым 4 буквам) ----------
@@ -271,7 +273,7 @@ def _related(kpi: str, main_dev: dict, start: str, end: str) -> list[dict]:
             prev_plan, prev_fact = _totals(_seg_table(dfk, meta["kind"], prev_start, prev_end), meta["kind"])
             change = _r((fact / prev_fact - 1) * 100, 1) if prev_fact else None
 
-        seg_dev = (seg["fact"] - seg["plan"]) / seg["plan"] * 100
+        seg_dev = ((seg["fact"] - seg["plan"]) / seg["plan"].replace(0, float("nan")) * 100).dropna()
         worst = seg_dev.abs().idxmax() if len(seg_dev) else None
         worst_pct = float(seg_dev[worst]) if worst is not None else None
         consistent = None

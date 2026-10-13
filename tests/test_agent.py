@@ -195,3 +195,13 @@ def test_prompt_version_is_a_hash_of_the_prompt_text():
 
     digest = hashlib.sha1((prompts.SYSTEM_PROMPT + prompts.FINAL_INSTRUCTION).encode("utf-8")).hexdigest()[:6]
     assert prompts.PROMPT_VERSION == f"{prompts.PROMPT_LABEL}-{digest}"
+
+
+def test_backend_crash_is_reported_in_result_not_raised():
+    class BrokenAdapter:
+        @property
+        def functions(self):
+            raise RuntimeError("MCP-сервер не запустился")
+
+    result = Agent(FakeLLM([]), BrokenAdapter()).run("вопрос")
+    assert result.memo is None and "Внутренняя ошибка агента" in result.error and "MCP-сервер не запустился" in result.error

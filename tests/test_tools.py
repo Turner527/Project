@@ -275,3 +275,28 @@ def test_full_kpi_name_inside_a_long_question_is_an_exact_match():
     q = "Какой сегмент сильнее всего влияет на отклонение показателя «Доля просрочки 30+ в рознице» и каков его вклад?"
     hit = core.find_kpis_by_goal(q)["kpi_matches"][0]
     assert hit["kpi"] == "Доля просрочки 30+ в рознице" and hit["match_score"] == 1.0
+
+
+def test_zero_plan_never_produces_non_finite_numbers(tmp_path, monkeypatch):
+    """Регрессия из обзора кода: нулевой план в сегменте не должен давать Infinity/NaN в JSON."""
+    import json
+
+    goals = pd.DataFrame(
+        [["Цель", None, "Босс", "А", "шт", "поток", "больше"], ["Цель", None, "Босс", "Б", "шт", "поток", "больше"]],
+        columns=list(generate.GOALS_COLUMNS),
+    )
+    rows = []
+    for kpi in ("А", "Б"):
+        for seg, plan, fact in (("X", 10, 8), ("Y", 0, 3)):  # у сегмента Y план равен нулю
+            for i in range(3):
+                rows.append([kpi, pd.Timestamp(2026, i + 1, 1), seg, plan, fact])
+    facts = pd.DataFrame(rows, columns=list(generate.FACTS_COLUMNS))
+    links = pd.DataFrame([["А", "Б", "положительно"]], columns=list(generate.LINKS_COLUMNS))
+    path = tmp_path / "zero.xlsx"
+    generate.write_workbook(path, goals, facts, links)
+    monkeypatch.setenv("KPI_DATA_PATH", str(path))
+    for result in (core.diagnose_deviation("А"), core.break_down_by_segment("А"), core.get_related_kpis("А"),
+                   core.get_deviation("А")):
+        json.dumps(result, allow_nan=False)  # бросит ValueError, если есть inf/NaN
+    rows_by_segment = {r["segment"]: r for r in core.break_down_by_segment("А")["segments"]}
+    assert rows_by_segment["Y"]["deviation_pct"] is None  # процент от нулевого плана не определён

@@ -7,6 +7,7 @@ import io
 import math
 import numbers
 import re
+import zipfile
 from pathlib import Path
 from typing import BinaryIO
 
@@ -29,6 +30,7 @@ from data.schema import (
 
 MAX_ERRORS = 15  # дальше пользователю уже не помогает
 MAX_EXAMPLES = 5  # сколько номеров строк показывать в одном сообщении
+MAX_UNPACKED_BYTES = 150 * 1024 * 1024  # xlsx с таким содержимым — уже не витрина KPI
 
 
 class WorkbookError(Exception):
@@ -64,10 +66,24 @@ def _suggest(name: str, options: list[str]) -> str:
 
 
 def _read_workbook(source: str | Path | bytes | BinaryIO) -> dict[str, pd.DataFrame]:
-    if isinstance(source, (bytes, bytearray)):
-        source = io.BytesIO(source)
     try:
-        return pd.read_excel(source, sheet_name=None, dtype=object, engine="openpyxl")
+        if isinstance(source, (str, Path)):
+            data = Path(source).read_bytes()
+        elif isinstance(source, (bytes, bytearray)):
+            data = bytes(source)
+        else:
+            data = source.read()
+        if zipfile.is_zipfile(io.BytesIO(data)):  # xlsx — это zip: не даём распаковать «бомбу»
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                unpacked = sum(info.file_size for info in archive.infolist())
+            if unpacked > MAX_UNPACKED_BYTES:
+                raise WorkbookError(
+                    [f"Файл слишком большой после распаковки ({unpacked // 1024 // 1024} МБ, допустимо не более "
+                     f"{MAX_UNPACKED_BYTES // 1024 // 1024} МБ). Уберите лишние листы и данные."]
+                )
+        return pd.read_excel(io.BytesIO(data), sheet_name=None, dtype=object, engine="openpyxl")
+    except WorkbookError:
+        raise
     except Exception as exc:  # битый zip, не xlsx, защищённый паролем и т.п.
         raise WorkbookError(
             [
