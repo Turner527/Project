@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -82,6 +83,7 @@ GOALS = [  # цель, родительская цель, владелец
     (G_DIGITAL, G_CLIENTS, "Директор по цифровым каналам"),
 ]
 
+# Первый KPI цели — главный (так его выбирают агент и заглушка).
 # базовые уровни по сегментам: Массовый, Зарплатные, Премиум, Молодёжь, Самозанятые и ИП
 KPIS = [
     Kpi("Чистая прибыль", G_PROFIT, "млн ₽", KIND_FLOW, BETTER_UP, (3300, 2200, 1900, 500, 1100), 0.006, "profit", 0.035),
@@ -96,8 +98,8 @@ KPIS = [
     Kpi("Стоимость фондирования", G_NII, "%", KIND_RATIO, BETTER_DOWN, (8.4, 6.2, 8.9, 8.0, 8.6), 0.0, "none", 0.012),
     Kpi("Комиссионный доход", G_FEES, "млн ₽", KIND_FLOW, BETTER_UP, (3400, 2300, 3200, 600, 1900), 0.008, "spending", 0.03),
     Kpi("Оборот по картам", G_FEES, "млрд ₽", KIND_FLOW, BETTER_UP, (110, 82, 90, 36, 32), 0.010, "spending", 0.03),
-    Kpi("Активные клиенты", G_CLIENTS, "тыс. клиентов", KIND_STOCK, BETTER_UP, (1900, 1500, 250, 700, 450), 0.003, "none", 0.004),
     Kpi("Отток клиентов", G_CLIENTS, "% в месяц", KIND_RATIO, BETTER_DOWN, (1.2, 0.7, 0.6, 1.8, 1.4), 0.0, "none", 0.05),
+    Kpi("Активные клиенты", G_CLIENTS, "тыс. клиентов", KIND_STOCK, BETTER_UP, (1900, 1500, 250, 700, 450), 0.003, "none", 0.004),
     Kpi("NPS", G_CLIENTS, "пункты", KIND_RATIO, BETTER_UP, (38, 45, 58, 36, 34), 0.0, "none", 0.03),
     Kpi("Остатки на счетах и вкладах физлиц", G_FUNDING, "млрд ₽", KIND_STOCK, BETTER_UP, (780, 520, 560, 90, 150), 0.007, "deposit", 0.006),
     Kpi("Доля цифровых продаж", G_DIGITAL, "%", KIND_RATIO, BETTER_UP, (66, 71, 58, 85, 60), 0.004, "none", 0.015),
@@ -251,7 +253,6 @@ def _effects_factor(effects: list[Effect], kpi: str, segment: str) -> np.ndarray
 
 def _generate_series(seed: int = SEED) -> dict[tuple[str, str], tuple[np.ndarray, np.ndarray]]:
     """(kpi, segment) -> (план, факт) по месяцам."""
-    rng = np.random.default_rng(seed)
     effects = [e for a in ANOMALIES for e in a["effects"]]
     t = np.arange(len(MONTHS))
     series: dict[tuple[str, str], tuple[np.ndarray, np.ndarray]] = {}
@@ -261,13 +262,16 @@ def _generate_series(seed: int = SEED) -> dict[tuple[str, str], tuple[np.ndarray
         bias = 0.01 if kpi.better == BETTER_UP else -0.01  # план чуть амбициознее факта
         for i, seg in enumerate(SEGMENTS):
             base = kpi.base[i] * (1 + kpi.trend) ** t * _season_vector(kpi.season)
+            # свой генератор на пару (KPI, сегмент): порядок KPI в списке не влияет на шум
+            rng = np.random.default_rng([seed, zlib.crc32(kpi.name.encode()), i])
             eps = _ar1_noise(rng, kpi.noise, len(MONTHS))
             plan = base * (1 + bias)
             fact = base * (1 + eps) * _effects_factor(effects, kpi.name, seg)
             series[(kpi.name, seg)] = (plan, fact)
 
     # портфель: P[t] = P[t-1]*(1-a) + выдачи[t]; план и факт считаются из своих выдач
-    for seg in SEGMENTS:
+    for i, seg in enumerate(SEGMENTS):
+        rng = np.random.default_rng([seed, zlib.crc32(PORTFOLIO.encode()), i])
         v_plan, v_fact = series[(ISSUANCE, seg)]
         p_plan, p_fact = np.zeros(len(MONTHS)), np.zeros(len(MONTHS))
         p_plan[0] = v_plan[0] / AMORTIZATION

@@ -248,3 +248,23 @@ def test_related_in_tiny_dataset(tiny):
     item = r["related"][0]
     assert item["kpi"] == "Остаток" and item["relation"] == "зависит от выбранного KPI"
     assert item["consistent_with_link"] is True  # оба хуже плана, связь положительная
+
+
+def test_last_months_shortcut():
+    three = core.get_deviation("Выдачи розничных кредитов", last_months=3)
+    assert three["period"] == {"from": "2026-07", "to": "2026-09", "months_count": 3}
+    explicit = core.get_deviation("Выдачи розничных кредитов", "2026-07", "2026-09")
+    assert strip(three) == strip(explicit)
+    # явный period_from главнее last_months
+    assert core.get_deviation("NPS", "2026-08", last_months=3)["period"]["from"] == "2026-08"
+    assert core.diagnose_deviation("NPS", last_months=2)["period"]["months_count"] == 2
+
+
+def strip(result):
+    return {k: v for k, v in result.items() if k != "call_id"}
+
+
+def test_first_kpi_of_each_goal_is_its_headline_kpi(anomalies):
+    for a in anomalies["anomalies"]:
+        goal = core.find_kpis_by_goal(a["goal"])["goal_matches"][0]
+        assert goal["kpis"][0]["kpi"] == a["primary_kpi"], f"{a['id']}: главный KPI цели должен идти первым"

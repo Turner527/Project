@@ -37,6 +37,13 @@ ToArg = Annotated[
 ]
 
 
+LastArg = Annotated[
+    int | None,
+    Field(description="Только последние N месяцев до конца данных (для «за последние 3 месяца»): "
+          "тогда period_from указывать не нужно", ge=1, le=60),
+]
+
+
 class ToolError(Exception):
     def __init__(self, message: str, **extra):
         super().__init__(message)
@@ -136,11 +143,16 @@ def _kpi_frame(kpi: str) -> tuple[pd.DataFrame, dict]:
     return ds.facts[ds.facts["kpi"] == kpi], meta
 
 
-def _period(dfk: pd.DataFrame, period_from: str | None, period_to: str | None) -> tuple[str, str, str | None]:
+def _period(
+    dfk: pd.DataFrame, period_from: str | None, period_to: str | None, last_months: int | None = None
+) -> tuple[str, str, str | None]:
     months = sorted(dfk["month"].unique())
     first, last = months[0], months[-1]
     end = _parse_month(period_to) if period_to else last
-    start = _parse_month(period_from) if period_from else _shift(end, -(DEFAULT_WINDOW - 1))
+    if period_from:
+        start = _parse_month(period_from)
+    else:
+        start = _shift(end, -((last_months or DEFAULT_WINDOW) - 1))
     if start > end:
         raise ToolError(f"Начало периода {start} позже конца {end}.")
     if end < first or start > last:
@@ -362,11 +374,11 @@ def find_kpis_by_goal(
 
 
 @_tool
-def get_deviation(kpi: KpiArg, period_from: FromArg = None, period_to: ToArg = None) -> dict:
+def get_deviation(kpi: KpiArg, period_from: FromArg = None, period_to: ToArg = None, last_months: LastArg = None) -> dict:
     """Отклонение факта от плана по KPI за период: план, факт, разница, процент, хуже или лучше плана."""
     name = _resolve_kpi(kpi)
     dfk, meta = _kpi_frame(name)
-    start, end, note = _period(dfk, period_from, period_to)
+    start, end, note = _period(dfk, period_from, period_to, last_months)
     dev, _ = _kpi_deviation(name, start, end)
     result = {
         "kpi": name,
@@ -382,11 +394,11 @@ def get_deviation(kpi: KpiArg, period_from: FromArg = None, period_to: ToArg = N
 
 
 @_tool
-def break_down_by_segment(kpi: KpiArg, period_from: FromArg = None, period_to: ToArg = None) -> dict:
+def break_down_by_segment(kpi: KpiArg, period_from: FromArg = None, period_to: ToArg = None, last_months: LastArg = None) -> dict:
     """Разложить отклонение KPI по сегментам клиентов: план, факт и вклад каждого сегмента в процентах."""
     name = _resolve_kpi(kpi)
     dfk, meta = _kpi_frame(name)
-    start, end, note = _period(dfk, period_from, period_to)
+    start, end, note = _period(dfk, period_from, period_to, last_months)
     b = _breakdown(dfk, meta, start, end)
     result = {
         "kpi": name,
@@ -404,12 +416,12 @@ def break_down_by_segment(kpi: KpiArg, period_from: FromArg = None, period_to: T
 
 
 @_tool
-def get_related_kpis(kpi: KpiArg, period_from: FromArg = None, period_to: ToArg = None) -> dict:
+def get_related_kpis(kpi: KpiArg, period_from: FromArg = None, period_to: ToArg = None, last_months: LastArg = None) -> dict:
     """Связанные KPI из таблицы влияний и их динамика за тот же период: отклонение от плана, изменение к
     предыдущему периоду, сегмент с наибольшим отклонением и согласуется ли это с направлением связи."""
     name = _resolve_kpi(kpi)
     dfk, meta = _kpi_frame(name)
-    start, end, note = _period(dfk, period_from, period_to)
+    start, end, note = _period(dfk, period_from, period_to, last_months)
     main_dev, _ = _kpi_deviation(name, start, end)
     result = {"kpi": name, "period": {"from": start, "to": end}, "related": _related(name, main_dev, start, end)}
     if not result["related"]:
@@ -450,13 +462,13 @@ def get_goal_info(
 
 
 @_tool
-def diagnose_deviation(kpi: KpiArg, period_from: FromArg = None, period_to: ToArg = None) -> dict:
+def diagnose_deviation(kpi: KpiArg, period_from: FromArg = None, period_to: ToArg = None, last_months: LastArg = None) -> dict:
     """Главный инструмент для вопросов «почему отстаём»: за один вызов даёт отклонение KPI, момент начала
     отставания, разбивку по сегментам с вкладами, связанные KPI и арифметику сценариев закрытия разрыва.
     Все числа для итоговой записки берите из его результата."""
     name = _resolve_kpi(kpi)
     dfk, meta = _kpi_frame(name)
-    start, end, note = _period(dfk, period_from, period_to)
+    start, end, note = _period(dfk, period_from, period_to, last_months)
     b = _breakdown(dfk, meta, start, end)
     total = b["total"]
     onset, run = _onset(dfk, meta, end)
