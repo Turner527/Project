@@ -60,9 +60,18 @@ def upload(client, content, name="kpi.xlsx"):
 
 def test_index_serves_russian_interface(client):
     html = client.get("/").text
-    for fragment in ("AI-аналитик", "Загрузить xlsx", "Полезно", "Не полезно", "Как получен ответ", "lang=\"ru\""):
+    for fragment in ("AI-аналитик", "Загрузить xlsx", "Полезно", "Не полезно", "Как получен ответ", "lang=\"ru\"",
+                     "Подключить GigaChat", "Новый разговор"):
         assert fragment in html
-    assert "prefers-color-scheme" not in html  # тёмной темы нет
+
+
+def test_index_has_dark_green_default_and_light_theme_without_external_resources(client):
+    html = client.get("/").text
+    # тёмно-зелёная тема по умолчанию, светлая — по переключателю; системную настройку браузера не читаем
+    assert '<html lang="ru" data-theme="dark">' in html and ':root[data-theme="light"]' in html
+    assert 'id="theme-btn"' in html and "prefers-color-scheme" not in html
+    # интерфейс должен работать офлайн: ни CDN, ни внешних шрифтов
+    assert "https://" not in html and "http://" not in html.replace("http://www.w3.org/2000/svg", "")
 
 
 def test_status(client):

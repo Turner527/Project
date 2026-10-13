@@ -1,120 +1,372 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AI-аналитик стратегического менеджмента</title>
-<link rel="icon" href="data:,">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='11' fill='%2321a038'/%3E%3Cpath d='M11 26l6-7 5 4 7-9' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
+  /* ---------- темы: тёмно-зелёная по умолчанию, светлая по переключателю ---------- */
   :root {
-    --bg: #f4f5f7; --card: #ffffff; --ink: #1c2330; --muted: #5d6778; --line: #d9dde4;
-    --accent: #1f3a5f; --accent-ink: #ffffff; --ok: #1d6b45; --ok-bg: #e5f2ea;
-    --warn: #8a4b00; --warn-bg: #fdf0dc; --bad: #9b1c1c; --bad-bg: #fbe6e6;
+    color-scheme: dark;
+    --bg: #07130d; --glow-1: rgba(33,160,56,.24); --glow-2: rgba(8,166,82,.13);
+    --surface: rgba(255,255,255,.045); --surface-2: rgba(255,255,255,.075); --panel: rgba(16,35,26,.72);
+    --line: rgba(255,255,255,.10); --line-strong: rgba(255,255,255,.20);
+    --ink: #eef6f0; --muted: #9db4a5; --faint: #6f8a7a;
+    --brand: #21a038; --brand-hover: #26b241; --brand-ink: #ffffff; --brand-2: #62dd8a;
+    --soft: rgba(98,221,138,.13); --on-soft: #a6efbe; --soft-line: rgba(98,221,138,.28);
+    --head-grad: linear-gradient(92deg, #c5f4d1 0%, #62dd8a 55%, #3fc66f 100%);
+    --warn: #f6bd57; --warn-bg: rgba(246,189,87,.13); --warn-line: rgba(246,189,87,.34);
+    --bad: #ff8a80; --bad-bg: rgba(255,138,128,.12); --bad-line: rgba(255,138,128,.32);
+    --good: #62dd8a; --composer-bg: #12261c; --shadow: 0 24px 64px rgba(0,0,0,.38); --header-bg: rgba(7,19,13,.72);
   }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f1f6f3; --glow-1: rgba(33,160,56,.14); --glow-2: rgba(8,166,82,.08);
+    --surface: #ffffff; --surface-2: #f3f8f5; --panel: #ffffff;
+    --line: #dce6e0; --line-strong: #c3d3c9;
+    --ink: #0f2218; --muted: #55695d; --faint: #82958a;
+    --brand: #21a038; --brand-hover: #1b8a30; --brand-ink: #ffffff; --brand-2: #08a652;
+    --soft: #e4f4e8; --on-soft: #17692a; --soft-line: #b7dfc2;
+    --head-grad: linear-gradient(92deg, #21a038 0%, #08a652 100%);
+    --warn: #8a5200; --warn-bg: #fff3dc; --warn-line: #f0d29b;
+    --bad: #b3261e; --bad-bg: #fdecea; --bad-line: #f1bcb7;
+    --good: #17802d; --composer-bg: #ffffff; --shadow: 0 18px 48px rgba(16,60,32,.12); --header-bg: rgba(241,246,243,.80);
+  }
+
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink);
-         font: 15px/1.5 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-  header { background: var(--accent); color: var(--accent-ink); padding: 14px 24px;
-           display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
-  header h1 { margin: 0; font-size: 18px; font-weight: 600; flex: 1 1 320px; }
-  header .meta { font-size: 13px; opacity: .9; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  .badge { display: inline-block; padding: 1px 8px; border-radius: 3px; font-size: 12px; font-weight: 600; }
-  .badge.live { background: #dbe7f7; color: var(--accent); }
-  .badge.offline { background: var(--warn-bg); color: var(--warn); }
-  button { font: inherit; cursor: pointer; border-radius: 4px; border: 1px solid var(--line);
-           background: var(--card); color: var(--ink); padding: 6px 14px; }
-  button:hover:not(:disabled) { border-color: var(--accent); }
-  button:disabled { opacity: .55; cursor: default; }
-  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-  header button { background: transparent; color: var(--accent-ink); border-color: rgba(255,255,255,.55); }
-  main { max-width: 920px; margin: 0 auto; padding: 20px 16px 140px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; margin-bottom: 16px; }
-  .q { background: #e9eef6; border-color: #cdd8ea; }
-  .q small { color: var(--muted); display: block; margin-bottom: 2px; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 18px 0 6px; font-weight: 600; }
-  h2:first-child { margin-top: 0; }
-  .status { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
-  .status .badge.ok { background: var(--ok-bg); color: var(--ok); }
-  .status .badge.bad { background: var(--warn-bg); color: var(--warn); }
-  .status .badge.err { background: var(--bad-bg); color: var(--bad); }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .chip { background: #eef1f5; border: 1px solid var(--line); border-radius: 3px; padding: 1px 8px; font-size: 13px; }
-  .scenario { border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; margin-bottom: 8px; }
-  .scenario b { display: block; margin-bottom: 2px; }
-  .scenario .effect { margin-top: 4px; }
-  .scenario ul, ul.plain { margin: 4px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
-  ul.checks { margin: 0; padding-left: 20px; }
-  mark { background: var(--warn-bg); color: var(--warn); border-bottom: 2px solid #d99a3d; padding: 0 2px; }
-  .unverified { background: var(--warn-bg); border: 1px solid #ecd2a4; color: var(--warn); border-radius: 4px;
-                padding: 8px 12px; margin: 8px 0; font-size: 14px; }
-  .unverified ul { margin: 4px 0 0; padding-left: 20px; }
-  .error { background: var(--bad-bg); border: 1px solid #e3b4b4; color: var(--bad); border-radius: 4px; padding: 10px 12px; }
-  .feedback { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
-  .feedback .note { color: var(--muted); font-size: 13px; }
-  .feedback input { flex: 1 1 260px; font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px; }
-  .feedback button.chosen { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-  details { margin-top: 10px; }
-  summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 14px; }
-  details .tool { border-top: 1px solid var(--line); padding: 8px 0; font-size: 14px; }
-  details .tool code { background: #eef1f5; padding: 0 4px; border-radius: 3px; }
-  pre { background: #f6f7f9; border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; overflow: auto;
-        max-height: 320px; font-size: 12.5px; margin: 6px 0 0; }
-  .muted { color: var(--muted); font-size: 13px; }
-  .welcome h2 { margin-bottom: 8px; }
-  .examples { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-  .examples button { text-align: left; }
-  footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line); padding: 12px 16px; }
-  footer form { max-width: 920px; margin: 0 auto; display: flex; gap: 10px; }
-  footer textarea { flex: 1; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; resize: none; height: 44px; }
-  .overlay { position: fixed; inset: 0; background: rgba(28,35,48,.45); display: none; align-items: center; justify-content: center; padding: 16px; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; color: var(--ink); min-height: 100vh;
+    font: 16px/1.55 "SB Sans Text", "SB Sans Display", Inter, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    background:
+      radial-gradient(1100px 620px at 8% -8%, var(--glow-1), transparent 62%),
+      radial-gradient(900px 520px at 100% 4%, var(--glow-2), transparent 58%),
+      var(--bg);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 28px; }
+  svg.i { width: 1.15em; height: 1.15em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .hidden { display: none !important; }
+  :focus-visible { outline: 2px solid var(--brand-2); outline-offset: 2px; }
+
+  /* ---------- шапка ---------- */
+  header.top { position: sticky; top: 0; z-index: 20; background: var(--header-bg); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid transparent; }
+  header.top .wrap { display: flex; align-items: center; gap: 20px; min-height: 84px; }
+  .brand { min-width: 0; display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+  .brand svg { width: 52px; height: 52px; filter: drop-shadow(0 8px 18px rgba(33,160,56,.35)); }
+  .brand b { display: block; font-size: 24px; letter-spacing: .02em; line-height: 1.1; font-weight: 700; }
+  .brand small { display: block; font-size: 12px; letter-spacing: .08em; color: var(--muted); margin-top: 3px; }
+  .nav-link { color: var(--muted); background: none; border: 0; font: inherit; cursor: pointer; padding: 8px 4px; margin-left: 12px; }
+  .nav-link:hover { color: var(--ink); }
+  .spacer { flex: 1; }
+  .btn { flex: none; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 10px; font: inherit; font-weight: 600; cursor: pointer; border-radius: 16px; padding: 12px 20px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); transition: transform .15s, border-color .15s, background .15s, box-shadow .15s; }
+  .btn:hover:not(:disabled) { border-color: var(--brand-2); transform: translateY(-1px); }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn.primary { background: linear-gradient(180deg, var(--brand-hover), var(--brand)); border-color: transparent; color: var(--brand-ink); box-shadow: 0 10px 28px rgba(33,160,56,.32); }
+  .btn.primary:hover:not(:disabled) { box-shadow: 0 14px 34px rgba(33,160,56,.45); }
+  .btn.sm { padding: 9px 14px; border-radius: 13px; font-size: 14px; }
+  .btn.icon { width: 52px; height: 52px; padding: 0; border-radius: 16px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; }
+  .dot.ok { background: var(--good); box-shadow: 0 0 0 4px rgba(98,221,138,.18); }
+  .dot.warn { background: var(--warn); box-shadow: 0 0 0 4px rgba(246,189,87,.18); }
+  .dot.bad { background: var(--bad); box-shadow: 0 0 0 4px rgba(255,138,128,.18); }
+
+  /* ---------- главная (hero) ---------- */
+  .hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 64px; align-items: center; padding: 52px 0 44px; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 10px; font-size: 12.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--on-soft); }
+  .eyebrow::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--brand-2); box-shadow: 0 0 0 5px var(--soft); }
+  .eyebrow.plain::before { display: none; }
+  .eyebrow.muted { color: var(--muted); }
+  h1.display { margin: 20px 0 22px; font-size: clamp(42px, 5.6vw, 78px); line-height: 1.06; letter-spacing: -.025em; font-weight: 700; }
+  .grad { background: var(--head-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  h1.display .i { width: .55em; height: .55em; color: var(--brand-2); margin-left: .12em; vertical-align: .18em; stroke-width: 1.4; }
+  .lead { font-size: 19px; line-height: 1.65; color: var(--muted); max-width: 560px; margin: 0 0 26px; }
+  .trust { display: flex; flex-wrap: wrap; gap: 14px 26px; color: var(--on-soft); font-size: 15px; margin-bottom: 34px; }
+  .trust span { display: inline-flex; gap: 9px; align-items: center; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 26px; }
+  .glance { padding: 22px 26px; max-width: 560px; box-shadow: var(--shadow); background: linear-gradient(160deg, var(--soft), var(--surface)); }
+  .glance header { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 14.5px; font-weight: 600; }
+  .glance header span { display: inline-flex; gap: 10px; align-items: center; }
+  .pill { font-size: 12px; font-weight: 500; color: var(--muted); padding: 4px 11px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); }
+  .glance .big { margin: 22px 0 4px; font-size: 40px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+  .glance .big small { font-size: 20px; font-weight: 600; color: var(--on-soft); margin-left: 6px; }
+  .glance p { margin: 0; color: var(--muted); font-size: 14px; }
+  .glance footer { display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+
+  .panel { padding: 0; overflow: hidden; background: var(--panel); border-radius: 30px; box-shadow: var(--shadow); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  .panel .pad { padding: 30px 32px 26px; }
+  .panel h2 { margin: 18px 0 8px; font-size: clamp(26px, 2.6vw, 34px); line-height: 1.18; letter-spacing: -.015em; font-weight: 700; }
+  .panel p.sub { margin: 0 0 22px; color: var(--muted); }
+  .panel .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .panel .foot { border-top: 1px solid var(--line); padding: 18px 32px 22px; }
+  .try { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .try button { font: inherit; font-size: 13.5px; color: var(--on-soft); background: var(--soft); border: 1px solid var(--soft-line); border-radius: 999px; padding: 6px 13px; cursor: pointer; transition: transform .15s; }
+  .try button:hover { transform: translateY(-1px); }
+  .dropzone { display: flex; align-items: center; gap: 16px; padding: 14px 16px; border: 1.5px dashed var(--line-strong); border-radius: 18px; transition: border-color .15s, background .15s; }
+  .dropzone.over { border-color: var(--brand-2); background: var(--soft); }
+  .dropzone .ico-box { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: var(--soft); color: var(--brand-2); font-size: 22px; flex: none; }
+  .dropzone b { display: block; font-size: 15px; }
+  .dropzone small { color: var(--muted); font-size: 13px; }
+  .dropzone .btn { margin-left: auto; }
+  .note { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; color: var(--muted); font-size: 13px; text-align: center; }
+
+  /* ---------- композер (общий для главной и чата) ---------- */
+  .composer { display: flex; gap: 10px; align-items: flex-end; background: var(--composer-bg); border: 1px solid var(--line-strong); border-radius: 22px; padding: 10px 10px 10px 18px; transition: border-color .15s, box-shadow .15s; }
+  .composer:focus-within { border-color: var(--brand-2); box-shadow: 0 0 0 4px var(--soft); }
+  .composer textarea { flex: 1; min-height: 52px; max-height: 180px; resize: none; background: transparent; border: 0; outline: 0; color: var(--ink); font: inherit; line-height: 1.5; padding: 13px 0; }
+  .composer textarea::placeholder { color: var(--faint); }
+  body:not(.chatting) .composer textarea { min-height: 96px; }
+  .composer .send { width: 52px; height: 52px; border-radius: 16px; padding: 0; font-size: 22px; flex: none; }
+  .hint { margin: 10px 0 0; text-align: center; font-size: 12.5px; color: var(--faint); }
+
+  /* ---------- блоки главной ниже hero ---------- */
+  .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; flex-wrap: wrap; margin: 56px 0 22px; }
+  .section-head h3 { margin: 0; font-size: clamp(26px, 2.8vw, 36px); letter-spacing: -.015em; font-weight: 600; }
+  .section-head span { color: var(--muted); font-size: 14px; }
+  .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .scenario-card { padding: 26px; display: flex; flex-direction: column; gap: 12px; text-align: left; font: inherit; color: inherit; cursor: pointer; transition: transform .18s, border-color .18s, background .18s; }
+  .scenario-card:hover { transform: translateY(-3px); border-color: var(--soft-line); background: var(--surface-2); }
+  .scenario-card h4 { margin: 4px 0 0; font-size: 22px; line-height: 1.25; font-weight: 600; }
+  .scenario-card p { margin: 0; color: var(--muted); font-size: 14.5px; flex: 1; }
+  .scenario-card .go { display: inline-flex; align-items: center; gap: 8px; color: var(--on-soft); font-weight: 600; font-size: 14.5px; margin-top: 8px; }
+  .steps { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .step { padding: 22px 24px; display: flex; gap: 16px; align-items: flex-start; }
+  .step .n { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; background: var(--soft); color: var(--on-soft); font-weight: 700; flex: none; }
+  .step b { display: block; font-size: 17px; margin-bottom: 4px; }
+  .step p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  footer.page { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-top: 52px; padding: 22px 0 40px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13.5px; }
+
+  /* ---------- чат ---------- */
+  main.chat { max-width: 920px; margin: 0 auto; padding: 28px 24px 200px; display: none; }
+  body.chatting main.chat { display: block; }
+  body.chatting .hero, body.chatting .landing { display: none; }
+  .msg { margin-bottom: 22px; animation: rise .35s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .msg.user { display: flex; justify-content: flex-end; }
+  .bubble { max-width: 82%; background: linear-gradient(160deg, var(--soft), var(--surface)); border: 1px solid var(--soft-line); border-radius: 22px 22px 6px 22px; padding: 14px 20px; }
+  .bubble small { display: block; color: var(--on-soft); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 3px; }
+  .answer { padding: 26px 28px; box-shadow: var(--shadow); background: var(--panel); }
+  .answer-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+  .avatar { width: 40px; height: 40px; border-radius: 13px; background: linear-gradient(135deg, var(--brand), var(--brand-2)); display: grid; place-items: center; color: #fff; font-size: 20px; flex: none; }
+  .answer-head b { font-size: 17px; }
+  .badge { display: inline-flex; align-items: center; gap: 7px; padding: 5px 13px; border-radius: 999px; font-size: 13px; font-weight: 600; border: 1px solid transparent; }
+  .badge.ok { background: var(--soft); color: var(--on-soft); border-color: var(--soft-line); }
+  .badge.bad { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-line); }
+  .badge.err { background: var(--bad-bg); color: var(--bad); border-color: var(--bad-line); }
+  .muted { color: var(--muted); font-size: 13.5px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 4px 0 8px; }
+  .tile { padding: 16px 18px; border-radius: 18px; background: var(--surface-2); border: 1px solid var(--line); }
+  .tile .lbl { min-height: 2.6em; font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+  .tile .val { margin: 6px 0 2px; font-size: 27px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; overflow-wrap: anywhere; }
+  .tile .val.neg { color: var(--bad); } .tile .val.pos { color: var(--good); }
+  .tile .cap { font-size: 13px; color: var(--muted); }
+  .kpis-src { font-size: 12px; color: var(--faint); margin: 2px 2px 0; }
+  h5.sec { margin: 26px 0 10px; font-size: 12.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .lead-text { margin: 0 0 10px; font-size: 16.5px; line-height: 1.65; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .chip { display: inline-block; background: var(--soft); color: var(--on-soft); border: 1px solid var(--soft-line); border-radius: 999px; padding: 3px 13px; font-size: 13.5px; }
+  .chip.src { background: var(--surface-2); color: var(--muted); border-color: var(--line); font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 12.5px; }
+  .scenarios { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .scenario { padding: 18px 20px; border-radius: 20px; border: 1px solid var(--line); background: var(--surface-2); }
+  .scenario .num { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: var(--soft); color: var(--on-soft); font-weight: 700; font-size: 14px; margin-right: 10px; }
+  .scenario h6 { margin: 0 0 8px; font-size: 16.5px; font-weight: 600; display: flex; align-items: center; }
+  .scenario p { margin: 0 0 8px; color: var(--muted); font-size: 15px; }
+  .scenario .effect { padding: 10px 13px; border-radius: 13px; background: var(--soft); border: 1px solid var(--soft-line); color: var(--ink); font-size: 14.5px; }
+  .scenario .effect b { color: var(--on-soft); }
+  .scenario ul, ul.checks { margin: 10px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+  ul.checks { color: var(--ink); font-size: 15.5px; margin: 0; }
+  ul.checks li { margin-bottom: 6px; }
+  mark { background: var(--warn-bg); color: var(--warn); border-bottom: 2px solid var(--warn); border-radius: 3px; padding: 0 3px; }
+  .alert { border-radius: 16px; padding: 12px 16px; margin: 6px 0 14px; font-size: 14.5px; }
+  .alert.warn { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn); }
+  .alert.bad { background: var(--bad-bg); border: 1px solid var(--bad-line); color: var(--bad); }
+  .alert ul { margin: 6px 0 0; padding-left: 20px; }
+  details { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+  details details { margin-top: 8px; border-top: 0; padding-top: 0; }
+  summary { cursor: pointer; list-style: none; color: var(--on-soft); font-weight: 600; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: ""; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .15s; margin-right: 4px; }
+  details[open] > summary::before { transform: rotate(45deg); }
+  .tool { border-top: 1px solid var(--line); padding: 12px 0; font-size: 14px; }
+  .tool:first-of-type { border-top: 0; }
+  code { font-family: ui-monospace, "SF Mono", Consolas, monospace; background: var(--surface-2); border: 1px solid var(--line); padding: 1px 7px; border-radius: 7px; font-size: 12.5px; }
+  pre { background: rgba(0,0,0,.22); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; overflow: auto; max-height: 340px; font-size: 12.5px; line-height: 1.5; margin: 8px 0 0; color: var(--ink); }
+  :root[data-theme="light"] pre { background: #f3f8f5; }
+  .feedback { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .feedback .q { color: var(--muted); font-size: 14px; margin-right: 4px; }
+  .feedback input { flex: 1 1 240px; font: inherit; font-size: 14.5px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 13px; padding: 9px 14px; }
+  .feedback .btn.chosen { background: var(--soft); border-color: var(--brand-2); color: var(--on-soft); }
+  .skeleton { padding: 24px 28px; }
+  .skeleton .bar { height: 12px; border-radius: 8px; margin: 12px 0; background: linear-gradient(90deg, var(--surface-2), var(--line), var(--surface-2)); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+  /* ---------- док с вводом в режиме чата ---------- */
+  .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; padding: 40px 20px 18px; background: linear-gradient(to top, var(--bg) 52%, transparent); pointer-events: none; display: none; }
+  body.chatting .dock { display: block; }
+  .dock > div { max-width: 920px; margin: 0 auto; pointer-events: auto; }
+
+  /* ---------- диалоги ---------- */
+  .overlay { position: fixed; inset: 0; z-index: 50; background: rgba(2,10,6,.62); backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; padding: 18px; }
   .overlay.open { display: flex; }
-  .dialog { background: var(--card); border-radius: 6px; padding: 18px 20px; max-width: 640px; width: 100%; max-height: 80vh; overflow: auto; }
-  .dialog h3 { margin: 0 0 8px; }
-  .dialog ul { padding-left: 20px; }
-  .dialog.fail h3 { color: var(--bad); }
-  .dialog.done h3 { color: var(--ok); }
-  .hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
+  .dialog { background-color: var(--bg); border: 1px solid var(--line-strong); border-radius: 26px; padding: 28px 30px; max-width: 640px; width: 100%; max-height: 86vh; overflow: auto; box-shadow: var(--shadow); }
+  :root[data-theme="light"] .dialog { background-color: #fff; }
+  .dialog h3 { margin: 0 0 14px; font-size: 24px; letter-spacing: -.01em; display: flex; align-items: center; gap: 12px; }
+  .dialog.fail h3 { color: var(--bad); } .dialog.done h3 { color: var(--good); }
+  .dialog ul, .dialog ol { padding-left: 22px; margin: 8px 0 14px; } .dialog li { margin-bottom: 8px; }
+  .dialog p { color: var(--muted); margin: 8px 0; }
+  .dialog .actions { display: flex; justify-content: flex-end; margin-top: 18px; }
+  .dialog .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14.5px; margin: 10px 0 14px; }
+  .dialog .kv dt { color: var(--muted); } .dialog .kv dd { margin: 0; overflow-wrap: anywhere; }
+
+  /* ---------- адаптив ---------- */
+  @media (max-width: 960px) {
+    .hero { grid-template-columns: minmax(0, 1fr); gap: 36px; padding-top: 32px; }
+    .wrap { padding: 0 18px; }
+    header.top .wrap { min-height: 72px; gap: 10px; }
+    .nav-link { display: none; }
+    .brand small { display: none; } .brand svg { width: 42px; height: 42px; } .brand b { font-size: 20px; }
+  }
+  @media (max-width: 640px) {
+    #upload-btn span, #restart-btn .lbl, #llm-btn .txt { display: none; }
+    header.top .wrap { gap: 8px; } .brand b { font-size: 18px; white-space: nowrap; } .brand { gap: 10px; } .brand svg { width: 38px; height: 38px; }
+    body.chatting #upload-btn { display: none; }
+    header.top .btn:not(.icon) { padding: 10px 12px; } header.top .btn.icon { width: 44px; height: 44px; }
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .tile { padding: 13px 14px; } .tile .val { font-size: 21px; } .tile .lbl { min-height: 3.6em; }
+    .btn.icon { width: 46px; height: 46px; }
+    .panel .pad { padding: 22px 20px; } .panel .foot { padding: 16px 20px 20px; }
+    .dropzone { flex-wrap: wrap; } .dropzone .btn { margin-left: 0; width: 100%; }
+    .answer { padding: 20px 18px; } .bubble { max-width: 94%; }
+    main.chat { padding: 18px 14px 190px; }
+    .scenarios { grid-template-columns: minmax(0, 1fr); }
+    .lead { font-size: 17px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } html { scroll-behavior: auto; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>AI-аналитик стратегического менеджмента банка</h1>
-  <div class="meta">
-    <span id="mode" class="badge live">…</span>
-    <span id="dataset" title="Активная витрина данных">…</span>
-    <button id="upload-btn" type="button">Загрузить xlsx</button>
+
+<header class="top">
+  <div class="wrap">
+    <button class="brand" id="brand" type="button" aria-label="На главную">
+      <svg viewBox="0 0 40 40" aria-hidden="true">
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#21a038"/><stop offset="1" stop-color="#2ed0a0"/></linearGradient></defs>
+        <rect width="40" height="40" rx="11" fill="url(#lg)"/>
+        <path d="M11 26l6-7 5 4 7-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="29" cy="14" r="2.4" fill="#fff"/>
+      </svg>
+      <span><b>AI-аналитик</b><small>Стратегический менеджмент</small></span>
+    </button>
+    <button class="nav-link" id="how-btn" type="button">Как это работает</button>
+    <span class="spacer"></span>
+    <button class="btn sm hidden" id="restart-btn" type="button"><span data-icon="refresh"></span><span class="lbl">Новый разговор</span></button>
+    <button class="btn" id="upload-btn" type="button" title="Загрузить свою витрину данных"><span data-icon="upload"></span><span>Загрузить xlsx</span></button>
+    <button class="btn" id="llm-btn" type="button" aria-label="Подключение к GigaChat"><span class="dot" id="llm-dot"></span><span data-icon="link"></span><span class="txt" id="llm-txt">Подключить GigaChat</span></button>
+    <button class="btn icon" id="theme-btn" type="button" aria-label="Переключить тему"></button>
     <input id="file" type="file" accept=".xlsx" hidden>
   </div>
 </header>
 
-<main id="chat">
-  <section class="card welcome" id="welcome">
-    <h2>С чего начать</h2>
-    <p class="muted" style="margin-top:0">Задайте вопрос об отклонении от цели или KPI. Все числа в ответе считает код,
-      а не модель; непроверенные числа подсвечиваются.</p>
-    <div class="examples" id="examples"></div>
+<div class="wrap">
+  <section class="hero">
+    <div>
+      <span class="eyebrow">Ваше пространство аналитики</span>
+      <h1 class="display">От отклонения<br>к ясным<br><span class="grad">решениям</span><span data-icon="sparkles"></span></h1>
+      <p class="lead">Спросите, почему цель отстаёт. Агент найдёт причины в данных, проверит связанные KPI и подготовит записку: диагноз, сценарии и что проверить вручную.</p>
+      <div class="trust">
+        <span><span data-icon="shield"></span>Все числа считает код</span>
+        <span><span data-icon="sparkles"></span>AI с GigaChat</span>
+      </div>
+      <div class="card glance" id="glance">
+        <header><span><span data-icon="layers"></span>Взгляд на данные</span><span class="pill" id="glance-src">…</span></header>
+        <div class="big" id="glance-big">…</div>
+        <p id="glance-sub">&nbsp;</p>
+        <footer><span id="glance-mode">&nbsp;</span><span>Источники каждого вывода доступны</span></footer>
+      </div>
+    </div>
+
+    <div class="card panel" id="panel">
+      <div class="pad">
+        <div class="row"><span class="eyebrow plain muted">Начните с вопроса</span><span class="pill" id="panel-pill">…</span></div>
+        <h2>Что вы хотите понять?</h2>
+        <p class="sub">Назовите цель или KPI и, если нужно, период — своими словами.</p>
+        <div id="form-slot">
+          <form id="form" autocomplete="off">
+            <div class="composer">
+              <textarea id="question" rows="1" placeholder="Например: почему мы отстаём по цели роста розничного кредитования и что делать?" required minlength="3" maxlength="1000" aria-label="Ваш вопрос"></textarea>
+              <button class="btn primary send" id="send" type="submit" aria-label="Отправить"><span data-icon="send"></span></button>
+            </div>
+            <p class="hint" id="hint">Enter — отправить, Shift + Enter — новая строка</p>
+          </form>
+        </div>
+        <div class="try" id="try"></div>
+      </div>
+      <div class="foot">
+        <div class="dropzone" id="dropzone">
+          <div class="ico-box"><span data-icon="file"></span></div>
+          <div><b>Своя витрина данных?</b><small>Перетащите xlsx с листами goals, facts, links</small></div>
+          <button class="btn sm" id="upload-btn-2" type="button"><span data-icon="upload"></span>Выбрать файл</button>
+        </div>
+        <div class="note"><span data-icon="lock"></span><span>Файл проверяется и хранится на вашем сервере. В GigaChat уходят только вопрос и результаты расчётов.</span></div>
+      </div>
+    </div>
   </section>
-</main>
 
-<footer>
-  <form id="form">
-    <textarea id="question" placeholder="Например: почему мы отстаём по цели роста розничного кредитования и что делать?" required minlength="3" maxlength="1000"></textarea>
-    <button class="primary" id="send" type="submit">Спросить</button>
-  </form>
-</footer>
+  <section class="landing" id="landing">
+    <div id="examples-block">
+      <div class="section-head"><h3>Примеры вопросов</h3><span>Работают на демо-данных</span></div>
+      <div class="grid" id="scenario-grid"></div>
+    </div>
+    <div class="section-head"><h3>От вопроса к решению</h3><span>Три понятных шага</span></div>
+    <div class="grid steps">
+      <div class="card step"><div class="n">01</div><div><b>Задайте вопрос</b><p>Назовите цель или KPI и период — так, как спросили бы коллегу.</p></div></div>
+      <div class="card step"><div class="n">02</div><div><b>Код считает, модель выбирает</b><p>Агент вызывает инструменты MCP. Каждое число рассчитано по витрине, а не придумано моделью.</p></div></div>
+      <div class="card step"><div class="n">03</div><div><b>Проверьте записку</b><p>Диагноз, сценарии и что проверить вручную. Числа сверены с расчётом, сомнительные подсвечены.</p></div></div>
+    </div>
+    <footer class="page"><span>AI-аналитик · числа считает код, а не модель</span><span id="foot-note">&nbsp;</span></footer>
+  </section>
+</div>
 
-<div class="overlay" id="overlay"><div class="dialog" id="dialog"></div></div>
+<main class="chat" id="chat" aria-live="polite"></main>
+
+<div class="dock" id="dock"><div id="dock-slot"></div></div>
+
+<div class="overlay" id="overlay"><div class="dialog" id="dialog" role="dialog" aria-modal="true"></div></div>
 
 <script>
 "use strict";
-const EXAMPLES = [
-  "Почему мы отстаём по цели роста розничного кредитования и что делать?",
-  "Почему растёт просрочка и в каком сегменте?",
-  "Что происходит с комиссионными доходами за последние 3 месяца?",
-  "Есть ли проблемы с оттоком клиентов?",
-];
-
 const $ = (id) => document.getElementById(id);
+
+/* ---------- иконки (статические SVG-константы) ---------- */
+const ICONS = {
+  shield: '<path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/>',
+  sparkles: '<path d="M11 3l1.8 4.7L17.5 9.5l-4.7 1.8L11 16l-1.8-4.7L4.5 9.5l4.7-1.8L11 3z"/><path d="M18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"/>',
+  upload: '<path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/>',
+  layers: '<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  send: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  up: '<path d="M7 11v9H4v-9h3zM7 11l4-8c1.4 0 2.5 1.1 2.5 2.5V9H19a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 17.8 20H7"/>',
+  down: '<path d="M17 13V4h3v9h-3zM17 13l-4 8c-1.4 0-2.5-1.1-2.5-2.5V15H5a2 2 0 0 1-2-2.3l1.2-7A2 2 0 0 1 6.2 4H17"/>',
+  refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/>',
+  check: '<path d="M5 13l4 4 10-10"/>',
+  alert: '<path d="M12 3l10 18H2L12 3z"/><path d="M12 10v5M12 18h.01"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1"/>',
+};
+function icon(name) {
+  const span = document.createElement("span");
+  span.style.display = "inline-flex";
+  span.innerHTML = `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ""}</svg>`; // только константы выше
+  return span;
+}
+function fillIcons(root) {
+  root.querySelectorAll("[data-icon]").forEach((n) => { n.replaceChildren(icon(n.dataset.icon)); n.style.display = "inline-flex"; });
+}
 
 function el(tag, attrs, ...children) {
   const node = document.createElement(tag);
@@ -129,6 +381,10 @@ function el(tag, attrs, ...children) {
   }
   return node;
 }
+
+const numFmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
+const fmt = (n) => (n == null ? "н/д" : numFmt.format(n).replace("-", "\u2212"));
+const fmtPct = (n) => (n == null ? "н/д" : `${n > 0 ? "+" : ""}${fmt(n)}%`);
 
 function clientId() {
   try {
@@ -148,7 +404,97 @@ async function api(path, options) {
   return { ok: res.ok, status: res.status, body };
 }
 
-/* Текст с подсветкой непроверенных чисел */
+/* ---------- тема ---------- */
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const btn = $("theme-btn");
+  btn.replaceChildren(icon(theme === "dark" ? "sun" : "moon"));
+  btn.title = theme === "dark" ? "Светлая тема" : "Тёмная тема";
+  try { localStorage.setItem("theme", theme); } catch (e) { /* без сохранения */ }
+}
+function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem("theme"); } catch (e) { /* нет доступа */ }
+  applyTheme(saved === "light" ? "light" : "dark");
+}
+
+/* ---------- состояние ---------- */
+let status = null;
+let chatting = false;
+
+const SCENARIOS = [
+  { tag: "Розничное кредитование", title: "Почему отстаём по выдачам", text: "Выдачи, одобрение заявок и вклад сегментов",
+    q: "Почему мы отстаём по цели роста розничного кредитования и что делать?" },
+  { tag: "Качество портфеля", title: "Откуда растёт просрочка", text: "Просрочка 30+, сегменты и связанные показатели",
+    q: "Почему растёт просрочка и в каком сегменте?" },
+  { tag: "Комиссии и клиенты", title: "Где теряем доход", text: "Комиссионный доход и обороты по картам за 3 месяца",
+    q: "Что происходит с комиссионными доходами за последние 3 месяца?" },
+  { tag: "Клиентская база", title: "Что с оттоком", text: "Отток, активные клиенты и остатки на счетах",
+    q: "Есть ли проблемы с оттоком клиентов?" },
+];
+
+/* ---------- главная ---------- */
+function renderLanding() {
+  $("try").replaceChildren(...SCENARIOS.slice(0, 3).map((s) =>
+    el("button", { type: "button", onclick: () => { $("question").value = s.q; autosize(); $("question").focus(); } }, s.title)));
+  $("scenario-grid").replaceChildren(...SCENARIOS.map((s) =>
+    el("button", { class: "card scenario-card", type: "button", onclick: () => ask(s.q) },
+      el("span", { class: "eyebrow plain" }, s.tag), el("h4", {}, s.title), el("p", {}, s.text),
+      el("span", { class: "go" }, "Задать вопрос", icon("arrow")))));
+}
+
+function renderStatus() {
+  if (!status) return;
+  const d = status.dataset;
+  const dot = $("llm-dot"), txt = $("llm-txt");
+  if (status.llm_error) { dot.className = "dot bad"; txt.textContent = "Подключить GigaChat"; }
+  else if (status.offline) { dot.className = "dot warn"; txt.textContent = "Подключить GigaChat"; }
+  else { dot.className = "dot ok"; txt.textContent = status.llm.replace(/^gigachat:/, ""); }
+  $("llm-btn").title = status.llm_error || (status.offline ? "Сейчас работает офлайн-заглушка" : `Версия промпта ${status.prompt_version}`);
+
+  const mode = status.llm_error ? "модель не настроена" : status.offline ? "офлайн-заглушка" : status.llm.replace(/^gigachat:/, "");
+  $("panel-pill").textContent = mode;
+  $("glance-src").textContent = d.is_upload ? "Загруженный файл" : "Демо-данные";
+  $("glance-big").replaceChildren(String(d.kpis), el("small", {}, `KPI · ${d.goals} ${plural(d.goals, "цель", "цели", "целей")}`));
+  $("glance-sub").textContent = `${d.segments.length} сегментов клиентов · ${d.first_month} – ${d.last_month}`;
+  $("glance-mode").textContent = `Режим: ${mode}`;
+  $("examples-block").classList.toggle("hidden", d.is_upload);
+  $("foot-note").textContent = d.is_upload ? "Загруженная витрина данных" : "Синтетические демо-данные, реальные данные не используются";
+}
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
+}
+async function refreshStatus() {
+  const res = await api("/api/status");
+  if (res.ok) { status = res.body; renderStatus(); }
+}
+
+/* ---------- режимы: главная / чат ---------- */
+const HERO_PLACEHOLDER = $("question").placeholder;
+function setChatting(on) {
+  chatting = on;
+  $("question").placeholder = on ? "Спросите про цель или KPI…" : HERO_PLACEHOLDER;
+  document.body.classList.toggle("chatting", on);
+  $("restart-btn").classList.toggle("hidden", !on);
+  $(on ? "dock-slot" : "form-slot").append($("form"));
+  window.scrollTo({ top: 0 });
+  autosize();
+}
+function restart() {
+  $("chat").replaceChildren();
+  setChatting(false);
+  $("question").focus();
+}
+
+/* ---------- ввод ---------- */
+function autosize() {
+  const q = $("question");
+  q.style.height = "auto";
+  q.style.height = Math.min(q.scrollHeight, 180) + "px";
+}
+
+/* ---------- подсветка непроверенных чисел ---------- */
 function highlighted(text, unverified) {
   const values = [...new Set((unverified || []).map((u) => u.value))].filter(Boolean);
   if (!values.length) return text;
@@ -164,44 +510,62 @@ function highlighted(text, unverified) {
   return out;
 }
 
+/* ---------- ответ ---------- */
 function statusBadge(data) {
-  if (data.status === "проверен") return el("span", { class: "badge ok" }, "✓ проверен");
-  if (data.status === "ошибка") return el("span", { class: "badge err" }, "ошибка");
-  return el("span", { class: "badge bad" }, "⚠ есть непроверенные числа");
+  if (data.status === "проверен") return el("span", { class: "badge ok" }, icon("check"), "проверен");
+  if (data.status === "ошибка") return el("span", { class: "badge err" }, icon("alert"), "ошибка");
+  return el("span", { class: "badge bad" }, icon("alert"), "есть непроверенные числа");
+}
+
+/* Ключевые цифры берём из результата инструмента, а не из текста модели */
+function keyTiles(data) {
+  const call = [...data.tool_calls].reverse().find((c) => c.tool === "diagnose_deviation" && !c.error);
+  if (!call) return null;
+  const d = call.result, dev = d.deviation, top = d.breakdown && d.breakdown.top_segment;
+  const tone = dev.significant ? (dev.unfavorable ? "neg" : "pos") : "";
+  const tiles = [
+    el("div", { class: "tile" }, el("div", { class: "lbl" }, "Отклонение от плана"),
+      el("div", { class: `val ${tone}` }, fmtPct(dev.deviation_pct)), el("div", { class: "cap" }, `${d.kpi} · ${dev.assessment}`)),
+    el("div", { class: "tile" }, el("div", { class: "lbl" }, "Факт / план"),
+      el("div", { class: "val" }, `${fmt(dev.fact)} / ${fmt(dev.plan)}`), el("div", { class: "cap" }, `${d.unit} · ${d.period.from} – ${d.period.to}`)),
+  ];
+  if (top) tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, "Главный сегмент"),
+    el("div", { class: "val" }, top), el("div", { class: "cap" }, `${fmt(d.breakdown.top_segment_contribution_pct)}% отклонения`)));
+  if (d.off_plan_since) tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, "Отклонение держится"),
+    el("div", { class: "val" }, `${d.months_off_plan_in_row} мес.`), el("div", { class: "cap" }, `с ${d.off_plan_since}`)));
+  return [el("div", { class: "kpis" }, tiles), el("div", { class: "kpis-src" }, `Цифры из расчёта · ${call.call_id}`)];
 }
 
 function renderMemo(data) {
-  const memo = data.memo, ver = data.verification;
-  const unv = ver ? ver.unverified : [];
+  const memo = data.memo, ver = data.verification, unv = ver ? ver.unverified : [];
   const parts = [];
-  parts.push(el("div", { class: "status" }, statusBadge(data),
-    el("span", { class: "muted" }, ver ? `проверено чисел: ${ver.checked}` : "")));
+  const tiles = keyTiles(data);
+  if (tiles) parts.push(...tiles);
   if (unv.length) {
-    parts.push(el("div", { class: "unverified" },
-      "Этих чисел нет в результатах инструментов — не используйте их без проверки:",
+    parts.push(el("div", { class: "alert warn" }, el("b", {}, "Этих чисел нет в результатах инструментов"), " — не используйте их без проверки:",
       el("ul", {}, unv.map((u) => el("li", {}, el("b", {}, u.value), ` — ${u.context}`)))));
   }
-  parts.push(el("h2", {}, "Диагноз"));
-  parts.push(el("p", { style: "margin:0 0 6px" }, highlighted(memo.diagnosis.summary, unv)));
+  parts.push(el("h5", { class: "sec" }, "Диагноз"));
+  parts.push(el("p", { class: "lead-text" }, highlighted(memo.diagnosis.summary, unv)));
   parts.push(el("div", {}, el("b", {}, "Причина: "), highlighted(memo.diagnosis.root_cause, unv)));
   if (memo.diagnosis.key_segments.length) {
     parts.push(el("div", { class: "chips" }, memo.diagnosis.key_segments.map((s) => el("span", { class: "chip" }, s))));
   }
   if (memo.scenarios.length) {
-    parts.push(el("h2", {}, "Сценарии"));
-    memo.scenarios.forEach((s, i) => parts.push(el("div", { class: "scenario" },
-      el("b", {}, `${i + 1}. `, highlighted(s.name, unv)),
-      el("div", {}, highlighted(s.description, unv)),
+    parts.push(el("h5", { class: "sec" }, "Сценарии"));
+    parts.push(el("div", { class: "scenarios" }, memo.scenarios.map((s, i) => el("div", { class: "scenario" },
+      el("h6", {}, el("span", { class: "num" }, i + 1), highlighted(s.name, unv)),
+      el("p", {}, highlighted(s.description, unv)),
       el("div", { class: "effect" }, el("b", {}, "Оценка эффекта: "), highlighted(s.effect_estimate, unv)),
-      s.assumptions.length ? el("ul", {}, s.assumptions.map((a) => el("li", {}, highlighted(a, unv)))) : null)));
+      s.assumptions.length ? el("ul", {}, s.assumptions.map((a) => el("li", {}, highlighted(a, unv)))) : null))));
   }
-  parts.push(el("h2", {}, "Что проверить вручную"));
+  parts.push(el("h5", { class: "sec" }, "Что проверить вручную"));
   parts.push(el("ul", { class: "checks" }, memo.manual_checks.map((c) => el("li", {}, highlighted(c, unv)))));
   if (memo.used_tool_calls.length) {
-    parts.push(el("h2", {}, "Числа взяты из вызовов"));
+    parts.push(el("h5", { class: "sec" }, "Числа взяты из вызовов"));
     parts.push(el("div", { class: "chips" }, memo.used_tool_calls.map((id) => {
       const call = data.tool_calls.find((c) => c.call_id === id);
-      return el("span", { class: "chip", title: "Раскройте «Как получен ответ»" }, call ? `${call.tool} · ${id}` : id);
+      return el("span", { class: "chip src", title: "Подробности — в блоке «Как получен ответ»" }, call ? `${call.tool} · ${id}` : id);
     })));
   }
   return parts;
@@ -211,7 +575,8 @@ function renderTrace(data) {
   const tokens = data.tokens || {};
   const rows = data.tool_calls.map((c) => el("div", { class: "tool" },
     el("div", {}, el("code", {}, c.tool), ` (${JSON.stringify(c.arguments)}) → `, el("code", {}, c.call_id),
-      el("span", { class: "muted" }, ` · ${c.duration_ms} мс`), c.error ? el("b", { style: "color:var(--bad)" }, ` · ошибка: ${c.error}`) : null),
+      el("span", { class: "muted" }, ` · ${c.duration_ms} мс`),
+      c.error ? el("b", { style: "color:var(--bad)" }, ` · ошибка: ${c.error}`) : null),
     el("details", {}, el("summary", {}, "Результат инструмента"), el("pre", {}, JSON.stringify(c.result, null, 2)))));
   return el("details", {},
     el("summary", {}, "Как получен ответ"),
@@ -223,9 +588,9 @@ function renderTrace(data) {
 }
 
 function renderFeedback(data) {
-  const note = el("span", { class: "note" }, "Ответ был полезен?");
+  const note = el("span", { class: "q" }, "Ответ был полезен?");
   const commentBox = el("input", { type: "text", maxlength: "2000", placeholder: "Комментарий (необязательно)", hidden: true });
-  const save = el("button", { type: "button", hidden: true }, "Сохранить комментарий");
+  const save = el("button", { class: "btn sm", type: "button", hidden: true }, "Сохранить комментарий");
   const buttons = {};
   async function rate(rating) {
     const res = await api("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -235,8 +600,8 @@ function renderFeedback(data) {
     note.textContent = "Спасибо! Можно добавить комментарий.";
     commentBox.hidden = save.hidden = false;
   }
-  buttons.useful = el("button", { type: "button", onclick: () => rate("useful") }, "👍 Полезно");
-  buttons.not_useful = el("button", { type: "button", onclick: () => rate("not_useful") }, "👎 Не полезно");
+  buttons.useful = el("button", { class: "btn sm", type: "button", onclick: () => rate("useful") }, icon("up"), "Полезно");
+  buttons.not_useful = el("button", { class: "btn sm", type: "button", onclick: () => rate("not_useful") }, icon("down"), "Не полезно");
   save.addEventListener("click", async () => {
     const res = await api("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ request_id: data.request_id, comment: commentBox.value }) });
@@ -245,102 +610,153 @@ function renderFeedback(data) {
   return el("div", { class: "feedback" }, note, buttons.useful, buttons.not_useful, commentBox, save);
 }
 
-function addQuestion(text) {
-  const card = el("section", { class: "card q" }, el("small", {}, "Вопрос"), text);
-  $("chat").append(card);
-  card.scrollIntoView({ block: "start", behavior: "smooth" });
+function answerCard(data) {
+  const ver = data.verification;
+  const head = el("div", { class: "answer-head" }, el("div", { class: "avatar" }, icon("sparkles")), el("b", {}, "Записка аналитика"),
+    statusBadge(data), ver ? el("span", { class: "muted" }, `проверено чисел: ${ver.checked}`) : null);
+  return el("section", { class: "card answer msg" }, head, ...renderMemo(data), renderTrace(data), renderFeedback(data));
+}
+
+/* ---------- диалог вопрос-ответ ---------- */
+function addUserMessage(text) {
+  const node = el("div", { class: "msg user" }, el("div", { class: "bubble" }, el("small", {}, "Вопрос"), text));
+  $("chat").append(node);
+  node.scrollIntoView({ block: "start", behavior: "smooth" });
 }
 
 function addPending() {
-  const label = el("span", {}, "Анализирую данные");
-  const card = el("section", { class: "card" }, label);
+  const label = el("span", { class: "muted" }, "Анализирую данные…");
+  const card = el("section", { class: "card skeleton msg" }, label,
+    el("div", { class: "bar", style: "width:92%" }), el("div", { class: "bar", style: "width:78%" }), el("div", { class: "bar", style: "width:60%" }));
   let seconds = 0;
   const timer = setInterval(() => { seconds += 1; label.textContent = `Анализирую данные… ${seconds} с`; }, 1000);
   $("chat").append(card);
   return { card, stop: () => clearInterval(timer) };
 }
 
+let busy = false;
 async function ask(question) {
-  $("welcome").remove();
-  addQuestion(question);
+  if (busy) return;
+  busy = true;
+  if (!chatting) setChatting(true);
+  addUserMessage(question);
   $("send").disabled = true;
   const pending = addPending();
   try {
     const res = await api("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question, client_id: clientId() }) });
     pending.stop();
-    const card = pending.card;
-    card.replaceChildren();
+    let node;
     if (!res.ok) {
-      const msg = res.body && res.body.detail ? (typeof res.body.detail === "string" ? res.body.detail : "Некорректный запрос.") : "Сервер вернул ошибку.";
-      card.append(el("div", { class: "error" }, msg));
+      const detail = res.body && res.body.detail;
+      node = el("section", { class: "card answer msg" }, el("div", { class: "alert bad" },
+        typeof detail === "string" ? detail : res.status === 422 ? "Некорректный вопрос: от 3 до 1000 символов." : "Сервер вернул ошибку."));
     } else if (res.body.memo) {
-      card.append(...renderMemo(res.body), renderTrace(res.body), renderFeedback(res.body));
+      node = answerCard(res.body);
     } else {
-      card.append(statusBadge(res.body), el("div", { class: "error" }, res.body.error || "Ответ не получен."), renderTrace(res.body));
+      node = el("section", { class: "card answer msg" }, el("div", { class: "answer-head" }, statusBadge(res.body)),
+        el("div", { class: "alert bad" }, res.body.error || "Ответ не получен."), renderTrace(res.body));
     }
-    card.scrollIntoView({ block: "start", behavior: "smooth" });
+    pending.card.replaceWith(node);
+    node.scrollIntoView({ block: "start", behavior: "smooth" });
   } catch (e) {
     pending.stop();
-    pending.card.replaceChildren(el("div", { class: "error" }, "Нет связи с сервером. Проверьте, что он запущен."));
+    pending.card.replaceWith(el("section", { class: "card answer msg" }, el("div", { class: "alert bad" }, "Нет связи с сервером. Проверьте, что он запущен.")));
   } finally {
+    busy = false;
     $("send").disabled = false;
+    $("question").focus();
   }
 }
 
-/* ---- диалоги ---- */
-function showDialog(kind, title, items, hint) {
+/* ---------- диалоги ---------- */
+function openDialog(kind, title, ...body) {
   const dialog = $("dialog");
   dialog.className = "dialog " + kind;
-  dialog.replaceChildren(el("h3", {}, title),
-    items.length ? el("ul", {}, items.map((t) => el("li", {}, t))) : null,
-    hint ? el("div", { class: "hint" }, hint) : null,
-    el("button", { type: "button", class: "primary", onclick: () => $("overlay").classList.remove("open") }, "Закрыть"));
+  dialog.replaceChildren(el("h3", {}, title), ...body,
+    el("div", { class: "actions" }, el("button", { class: "btn primary sm", type: "button", onclick: closeDialog }, "Закрыть")));
   $("overlay").classList.add("open");
 }
+function closeDialog() { $("overlay").classList.remove("open"); }
 
+function showHow() {
+  openDialog("info", "Как это работает",
+    el("ol", {},
+      el("li", {}, el("b", {}, "Вы задаёте вопрос"), " о цели или KPI своими словами."),
+      el("li", {}, el("b", {}, "Агент выбирает инструменты"), ": GigaChat решает, какие расчёты нужны. Инструменты работают как MCP-сервер над вашей витриной."),
+      el("li", {}, el("b", {}, "Все числа считает код"), ": отклонение от плана, вклад сегментов, связанные KPI, арифметика сценариев."),
+      el("li", {}, el("b", {}, "Верификатор сверяет ответ"), ": каждое число в тексте должно быть в результатах инструментов, иначе оно подсвечивается.")),
+    el("p", {}, "Под каждым ответом блок «Как получен ответ» показывает вызовы инструментов и их результаты."));
+}
+
+function showConnect() {
+  const s = status || {};
+  const state = s.llm_error ? ["bad", "Модель не настроена"] : s.offline ? ["warn", "Работает офлайн-заглушка"] : ["ok", `Подключено: ${s.llm}`];
+  const body = [el("p", {}, el("span", { class: `dot ${state[0]}`, style: "display:inline-block;margin-right:10px" }), state[1])];
+  if (s.llm_error) body.push(el("div", { class: "alert bad" }, s.llm_error));
+  if (s.offline || s.llm_error) {
+    body.push(el("p", {}, "Чтобы подключить GigaChat:"),
+      el("ol", {},
+        el("li", {}, "Получите ключ авторизации в личном кабинете GigaChat API и скачайте сертификат Минцифры (см. README, шаги 3–4)."),
+        el("li", {}, "Скопируйте ", el("code", {}, ".env.example"), " в ", el("code", {}, ".env"), " и заполните ", el("code", {}, "GIGACHAT_CREDENTIALS"), " и ", el("code", {}, "GIGACHAT_CA_BUNDLE"), "."),
+        el("li", {}, "Проверьте связь: ", el("code", {}, "python check_gigachat.py")),
+        el("li", {}, "Перезапустите сервер.")),
+      el("p", {}, "Проверка SSL всегда включена — отключить её нельзя."));
+  } else {
+    body.push(el("dl", { class: "kv" }, el("dt", {}, "Версия промпта"), el("dd", {}, s.prompt_version),
+      el("dt", {}, "Инструменты"), el("dd", {}, s.tools_backend === "direct" ? "прямой вызов" : "MCP-сервер")));
+  }
+  openDialog("info", "Подключение к GigaChat", ...body);
+}
+
+/* ---------- загрузка xlsx ---------- */
 async function upload(file) {
   const form = new FormData();
   form.append("file", file);
   const res = await api("/api/upload", { method: "POST", body: form });
   if (res.ok) {
     await refreshStatus();
-    showDialog("done", "Файл принят", [`Данные обновлены: ${file.name}`],
-      "Новые вопросы будут считаться по загруженной витрине. Вернуться к демо-данным: удалите data/uploads/active.xlsx.");
+    openDialog("done", "Файл принят",
+      el("p", {}, `Данные обновлены: ${file.name}. Новые вопросы будут считаться по загруженной витрине.`),
+      el("p", {}, "Вернуться к демо-данным: удалите файл data/uploads/active.xlsx и обновите страницу."));
   } else {
     const errors = res.body && res.body.errors ? res.body.errors : ["Не удалось загрузить файл."];
-    showDialog("fail", "Файл не прошёл проверку", errors,
-      "Нужны листы goals, facts, links с колонками, описанными в README. Исправьте файл и загрузите снова.");
+    openDialog("fail", "Файл не прошёл проверку", el("ul", {}, errors.map((t) => el("li", {}, t))),
+      el("p", {}, "Нужны листы goals, facts, links с колонками, описанными в README. Исправьте файл и загрузите снова."));
   }
 }
 
-async function refreshStatus() {
-  const res = await api("/api/status");
-  if (!res.ok) return;
-  const s = res.body;
-  const mode = $("mode");
-  if (s.llm_error) { mode.className = "badge offline"; mode.textContent = "модель не настроена"; mode.title = s.llm_error; }
-  else if (s.offline) { mode.className = "badge offline"; mode.textContent = "офлайн-заглушка"; mode.title = "Ответы собирает сценарий без обращения к GigaChat"; }
-  else { mode.className = "badge live"; mode.textContent = s.llm; mode.title = "Версия промпта: " + s.prompt_version; }
-  const d = s.dataset;
-  $("dataset").textContent = `${d.is_upload ? "Загруженный файл" : "Демо-данные"}: ${d.kpis} KPI, ${d.first_month} – ${d.last_month}`;
-}
-
-/* ---- события ---- */
+/* ---------- события ---------- */
 $("form").addEventListener("submit", (e) => {
   e.preventDefault();
   const q = $("question").value.trim();
-  if (q.length < 3 || $("send").disabled) return;
+  if (q.length < 3 || busy) return;
   $("question").value = "";
+  autosize();
   ask(q);
 });
+$("question").addEventListener("input", autosize);
 $("question").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); }
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("form").requestSubmit(); }
 });
-$("upload-btn").addEventListener("click", () => $("file").click());
+for (const id of ["upload-btn", "upload-btn-2"]) $(id).addEventListener("click", () => $("file").click());
 $("file").addEventListener("change", (e) => { if (e.target.files[0]) upload(e.target.files[0]); e.target.value = ""; });
-$("overlay").addEventListener("click", (e) => { if (e.target.id === "overlay") $("overlay").classList.remove("open"); });
-EXAMPLES.forEach((q) => $("examples").append(el("button", { type: "button", onclick: () => { $("question").value = q; $("question").focus(); } }, q)));
+$("theme-btn").addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+$("llm-btn").addEventListener("click", showConnect);
+$("how-btn").addEventListener("click", showHow);
+$("brand").addEventListener("click", () => { if (chatting) restart(); else window.scrollTo({ top: 0 }); });
+$("restart-btn").addEventListener("click", restart);
+$("overlay").addEventListener("click", (e) => { if (e.target.id === "overlay") closeDialog(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDialog(); });
+
+const dz = $("dropzone");
+["dragenter", "dragover"].forEach((t) => dz.addEventListener(t, (e) => { e.preventDefault(); dz.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => dz.addEventListener(t, (e) => { e.preventDefault(); dz.classList.remove("over"); }));
+dz.addEventListener("drop", (e) => { const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) upload(f); });
+
+fillIcons(document);
+initTheme();
+renderLanding();
 refreshStatus();
 </script>
 </body>
