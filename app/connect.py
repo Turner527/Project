@@ -81,7 +81,7 @@ def connect(credentials: str, scope: str, model: str, cert_bytes: bytes | None, 
     if tmp_cert:
         tmp_cert.replace(final_cert)
         config.ca_bundle = str(final_cert)
-        llm.config.ca_bundle = str(final_cert)
+        llm = GigaChatLLM(config)  # клиент должен ссылаться на итоговый файл, а не на удалённый временный
         try:
             updates["GIGACHAT_CA_BUNDLE"] = str(final_cert.relative_to(ROOT))
         except ValueError:

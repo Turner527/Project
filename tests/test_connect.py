@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import certifi
 import pytest
@@ -90,3 +91,19 @@ def test_write_env_updates_in_place(tmp_path):
     assert path.read_text() == "A=1\n# B=commented\nB=new\nC=3\n"
     with pytest.raises(ValueError):
         write_env(path, {"X": "a\nb"})
+
+
+def test_client_uses_the_saved_certificate_not_the_deleted_temp_file(tmp_path, monkeypatch):
+    """Регрессия: после подключения клиент SDK ссылался на удалённый .tmp и падал с FileNotFoundError."""
+    from app import connect as connect_mod
+
+    for name in ("GIGACHAT_CREDENTIALS", "GIGACHAT_CA_BUNDLE", "GIGACHAT_VERIFY_SSL_CERTS"):
+        monkeypatch.delenv(name, raising=False)
+    certs = tmp_path / "certs"
+    llm = connect_mod.connect(KEY, "GIGACHAT_API_PERS", "", open(certifi.where(), "rb").read(),
+                              tmp_path / ".env", certs, verify=lambda l: None)
+    used = Path(llm._client._settings.ca_bundle_file)
+    assert used == certs / "russian_trusted_root_ca.pem" and used.exists()
+    assert not list(certs.glob("*.tmp"))
+    for name in ("GIGACHAT_CREDENTIALS", "GIGACHAT_SCOPE", "GIGACHAT_CA_BUNDLE", "GIGACHAT_MODEL"):
+        monkeypatch.delenv(name, raising=False)
