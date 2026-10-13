@@ -277,33 +277,50 @@ def test_fallback_diversifies_problems_with_a_common_cause():
     assert [m["name"] for m in ordered] == ["a1", "a2", "b1", "a3"]  # не больше двух с одной причиной подряд
 
 
-def test_default_plan_puts_the_shared_cause_first(marketing):
+def test_default_plan_has_one_insight_per_cause_and_names_the_others_inside(marketing):
     digest = D.build_digest(marketing)
     plan = D.fallback_plan(digest)
-    first = plan["insights"][0]
-    assert first["title"] == "Канал «Поиск» — общий источник ухудшения" and first["severity"] == "problem"
-    assert first["text"].count("% изменения") >= 2 and "«Стоимость заказа» —" in first["text"]
+    ranked = [m for m in digest["metrics"] if m.get("significant") and m.get("unfavorable")]
+    causes = D._problem_causes(ranked)
+    problems = [i for i in plan["insights"] if i["severity"] == "problem"]
+    assert len(problems) == len(causes) and 1 <= len(problems) <= 5  # не три повтора одной причины, а один вывод на причину
+    first = problems[0]
+    assert first["title"].startswith("Стоимость заказа:") and "Основной вклад — канал «Поиск»" in first["text"]
+    assert "Тот же источник у показателей: «Стоимость лида» — 99,2% изменения" in first["text"]
     ids = {w["id"] for w in plan["widgets"]}
-    assert first["widgets"] and set(first["widgets"]) <= ids and len(plan["insights"]) <= 10
-    assert "Стоимость заказа" in plan["insights"][1]["title"]  # за общим выводом идут выводы по показателям
+    assert len(first["widgets"]) >= 2 and set(first["widgets"]) <= ids and len(plan["insights"]) <= 10
     res = DashboardAgent(ScriptedLLM()).run(marketing)
-    assert res.verification.status == STATUS_OK and res.plan["insights"][0]["title"] == first["title"]  # числа общего вывода — из сводки
+    assert res.verification.status == STATUS_OK and res.plan["insights"][0]["title"] == first["title"]  # числа — из сводки
 
 
-def test_default_plan_has_no_shared_cause_when_there_is_one_problem(tmp_path, monkeypatch):
+def test_default_plan_of_the_bank_demo_shows_all_four_planted_problems():
+    digest = D.build_digest(demo())
+    plan = D.fallback_plan(digest)
+    problems = [i for i in plan["insights"] if i["severity"] == "problem"]
+    text = " ".join(i["text"] for i in problems)
+    assert len(problems) == 4 and all(seg in text for seg in ("Самозанятые и ИП", "Зарплатные", "Премиум", "Молодёжь"))
+    tiles = [w["metric"] for w in plan["widgets"] if w["type"] == "kpi"]
+    assert len(tiles) == 8 and "Выдачи розничных кредитов" in tiles and "Комиссионный доход" in tiles  # главный показатель каждой причины
+    built = D.assemble(demo(), plan, digest)
+    assert built["notes"] == [] and len(built["widgets"]) == len(plan["widgets"])
+
+
+def test_default_plan_has_a_single_problem_insight_when_one_metric_got_worse(tmp_path, monkeypatch):
     plan = D.fallback_plan(D.build_digest(use(tmp_path, monkeypatch, "branches")))
-    assert plan["insights"][0]["title"].startswith("Расходы:")  # у отделений значимо ухудшился лишь один показатель
+    problems = [i for i in plan["insights"] if i["severity"] == "problem"]
+    assert len(problems) == 1 and problems[0]["title"].startswith("Расходы:")  # у отделений значимо ухудшился лишь один показатель
 
 
-def test_shared_source_needs_two_metrics_with_the_same_leading_value():
-    def metric(name, value, dim="Канал"):
-        return {"name": name, "dimensions": [{"dimension": dim, "top": [{"value": value, "contribution_pct": 50.0}]}]}
+def test_problem_causes_group_metrics_by_their_leading_value():
+    def metric(name, value=None, dim="Канал"):
+        found = {"name": name}
+        if value:
+            found["dimensions"] = [{"dimension": dim, "top": [{"value": value, "contribution_pct": 50.0}]}]
+        return found
 
-    assert D._shared_source([metric("a", "Поиск"), metric("b", "Email")]) is None
-    key, members = D._shared_source([metric("a", "Поиск"), metric("b", "Email"), metric("c", "Поиск")])
-    assert key == ("Канал", "Поиск") and [m["name"] for m in members] == ["a", "c"]
-    assert D._shared_source([]) is None and D._shared_source([{"name": "без вкладов"}]) is None
-    assert len(D._shared_source([metric(str(i), "Поиск") for i in range(6)])[1]) == 4
+    groups = D._problem_causes([metric("a", "Поиск"), metric("b", "Email"), metric("c", "Поиск"), metric("d")])
+    assert list(groups) == [("Канал", "Поиск"), ("Канал", "Email"), (None, "d")]  # без разрезов показатель — сам по себе
+    assert [m["name"] for m in groups[("Канал", "Поиск")]] == ["a", "c"] and D._problem_causes([]) == {}
 
 
 def test_assemble_builds_each_widget_type_from_the_engine(marketing):

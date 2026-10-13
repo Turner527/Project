@@ -227,15 +227,13 @@ def _diverse(items: list[dict], per_cluster: int = 2) -> list[dict]:
     return head + tail
 
 
-def _shared_source(problems: list[dict], limit: int = 4):
-    """Самое частое главное значение среди проблемных показателей: ((измерение, значение), показатели) — если их хотя бы два."""
+def _problem_causes(items: list[dict]) -> dict[tuple, list[dict]]:
+    """Проблемные показатели по причинам, в порядке важности: ключ — (измерение, главное значение), показатели с общей
+    причиной идут вместе; у показателя без разрезов ключ — он сам."""
     groups: dict[tuple, list[dict]] = {}
-    for m in problems:
-        c = _cluster(m)
-        if c:
-            groups.setdefault(c, []).append(m)
-    best = max(groups.items(), key=lambda kv: len(kv[1]), default=None)
-    return (best[0], best[1][:limit]) if best and len(best[1]) >= 2 else None
+    for m in items:
+        groups.setdefault(_cluster(m) or (None, m["name"]), []).append(m)
+    return groups
 
 
 def _first_dim(m: dict) -> str | None:
@@ -252,7 +250,10 @@ def fallback_plan(digest: dict) -> dict:
     metrics = digest["metrics"]
     rep = digest["report"]
     grain = rep.get("grain")
-    problems = _diverse([m for m in metrics if m.get("significant") and m.get("unfavorable")])
+    ranked = [m for m in metrics if m.get("significant") and m.get("unfavorable")]  # в порядке важности
+    problems = _diverse(ranked)
+    causes = _problem_causes(ranked)
+    leads = [members[0] for members in causes.values()]  # главный показатель каждой причины
     gains = [m for m in metrics if m.get("significant") and not m.get("unfavorable")]
     hidden = [m for m in metrics if m.get("local_deviations") and m not in problems]
     others = [m for m in metrics if m not in problems and m not in gains and m not in hidden]
@@ -267,12 +268,12 @@ def fallback_plan(digest: dict) -> dict:
         ids.setdefault(m["name"], []).append(wid)
 
     picks: list[dict] = []
-    for m in problems[:3] + hidden[:2] + gains[:1] + problems[3:] + gains[1:] + hidden[2:] + others:
-        if m not in picks and len(picks) < 7:
+    for m in leads[:4] + problems[:3] + hidden[:2] + gains[:1] + leads[4:] + problems[3:] + gains[1:] + hidden[2:] + others:
+        if m not in picks and len(picks) < 8:
             picks.append(m)
     for m in picks:
         add("kpi", m, m["name"], "Итог за период к базе сравнения" if m.get("baseline") else "Значение за период")
-    focus = [m for m in dict.fromkeys(id(x) for x in problems[:1] + hidden[:1] + problems[1:2] + gains[:1] + others[:1])]
+    focus = [m for m in dict.fromkeys(id(x) for x in leads[:1] + hidden[:1] + leads[1:2] + gains[:1] + others[:1])]
     by_id = {id(x): x for x in problems + hidden + gains + others}
     several_periods = (rep.get("period") or {}).get("periods", 0) >= 2
     for key in focus[:2] if grain and several_periods else []:
@@ -280,7 +281,7 @@ def fallback_plan(digest: dict) -> dict:
         dim = _first_dim(m)
         add("trend", m, f"Динамика: {m['name']}" + (f" (по «{dim}»)" if dim else ""),
             "Линия показателя по периодам" + (f" в разрезе «{dim}»" if dim else ""), dim)
-    for m in problems[:2] + hidden[:1] + gains[:1] + others:
+    for m in leads[:2] + hidden[:1] + problems[:2] + gains[:1] + others:
         if len([w for w in widgets if w["type"] == "breakdown"]) >= 2:
             break
         dim = _first_dim(m)
@@ -290,7 +291,8 @@ def fallback_plan(digest: dict) -> dict:
                 "Какие значения дают основное изменение" if m.get("baseline") else "Из чего состоит показатель", dim)
 
     insights: list[dict] = []
-    for m in problems[:3]:
+    for members in list(causes.values())[:5]:  # по одному инсайту на причину: показатели с той же причиной названы внутри
+        m = members[0]
         top = (m.get("dimensions") or [{}])[0]
         text = _fact_sentence(m, rep)
         if top.get("top"):
@@ -299,16 +301,13 @@ def fallback_plan(digest: dict) -> dict:
                      f" (собственное изменение {fmt.num(lead['change_pct'], True)}%).")
         if m.get("unfavorable_since"):
             text += f" Ухудшение держится {m['unfavorable_periods']} {m['interval']} подряд, с {m['unfavorable_since']}."
+        same = [x for x in members[1:4] if (x.get("dimensions") or [{}])[0].get("top")]
+        if same:
+            text += " Тот же источник у показателей: " + "; ".join(
+                f"«{x['name']}» — {fmt.num(x['dimensions'][0]['top'][0]['contribution_pct'])}% изменения" for x in same) + "."
+        linked = ids.get(m["name"], []) + [w for x in same for w in ids.get(x["name"], [])[:1]]
         insights.append({"title": f"{m['name']}: {m['assessment']}", "text": text, "severity": "problem",
-                         "widgets": ids.get(m["name"], [])})
-    shared = _shared_source(problems)
-    if shared:  # несколько ухудшений с одним главным значением — это один вывод, а не три повтора: ставим его первым
-        (dim, value), members = shared
-        names = ", ".join(f"«{m['name']}»" for m in members)
-        shares = "; ".join(f"«{m['name']}» — {fmt.num(m['dimensions'][0]['top'][0]['contribution_pct'])}% изменения" for m in members)
-        insights.insert(0, {"title": f"{fmt.dim_word(dim).capitalize()} «{value}» — общий источник ухудшения",
-                            "text": f"Основной вклад в ухудшение показателей {names} даёт {fmt.dim_word(dim)} «{value}»: {shares}.",
-                            "severity": "problem", "widgets": [w for m in members for w in ids.get(m["name"], [])[:1]]})
+                         "widgets": list(dict.fromkeys(linked))})
     for m in hidden[:2]:
         parts = "; ".join(f"{fmt.dim_word(x['dimension'])} «{x['value']}»: {fmt.num(x['change_pct'], True)}% к базе "
                           f"(влияние на итог {fmt.num(x['effect_on_total_pct'], True)}%)" for x in m["local_deviations"])
@@ -334,12 +333,15 @@ def fallback_plan(digest: dict) -> dict:
         insights.append({"title": "Качество данных", "text": " ".join(digest["data_quality"][:2]), "severity": "info", "widgets": []})
 
     next_steps: list[str] = []
-    for m in problems[:2]:
+    for members in list(causes.values())[:2]:
+        m = members[0]
+        names = ", ".join(f"«{x['name']}»" for x in members[:3])
         top = (m.get("dimensions") or [{}])[0]
         where = f" ({top['dimension']} «{top['top'][0]['value']}»)" if top.get("top") else ""
         since = m.get("unfavorable_since") or (rep["analysis_window"]["from"] if rep.get("analysis_window") else "начала периода")
         who = f" Владелец цели: {m['owner']}." if m.get("owner") else ""
-        next_steps.append(f"Выяснить, что изменилось по показателю «{m['name']}»{where} с {since}: условия, каналы, поставщики, "
+        word = "показателю" if len(members[:3]) == 1 else "показателям"
+        next_steps.append(f"Выяснить, что изменилось по {word} {names}{where} с {since}: условия, каналы, поставщики, "
                           f"качество данных.{who}")
     for m in hidden[:1]:
         x = m["local_deviations"][0]
@@ -349,9 +351,11 @@ def fallback_plan(digest: dict) -> dict:
         next_steps.insert(0, "Выбрать показатели, за которыми нужно следить регулярно, и задать для них плановые значения.")
 
     questions: list[str] = []
-    for m in (problems + hidden + gains + others)[:2]:
-        questions.append(f"Почему изменился показатель «{m['name']}» и где именно?")
-    lead_metric = (problems + hidden)[:1]
+    asked = [m for m in dict.fromkeys(id(x) for x in leads[:2] + problems + hidden + gains + others)]
+    by_any = {id(x): x for x in leads + problems + hidden + gains + others}
+    for key in asked[:2]:
+        questions.append(f"Почему изменился показатель «{by_any[key]['name']}» и где именно?")
+    lead_metric = (leads + hidden)[:1]
     if lead_metric:
         m = lead_metric[0]
         dim = _first_dim(m)
@@ -368,7 +372,8 @@ def fallback_plan(digest: dict) -> dict:
         head += f", период {rep['period']['from']} – {rep['period']['to']}"
     parts = [head]
     if problems:
-        parts.append("Значимое ухудшение: " + ", ".join(f"«{m['name']}»" for m in problems[:4]))
+        worst = [by_any[k] for k in dict.fromkeys(id(x) for x in leads + problems)][:4]
+        parts.append("Значимое ухудшение: " + ", ".join(f"«{m['name']}»" for m in worst))
     elif hidden:
         parts.append("Итоги в норме, но внутри есть ухудшения: " + ", ".join(f"«{m['name']}»" for m in hidden[:3]))
     else:

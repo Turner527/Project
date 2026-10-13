@@ -16,6 +16,7 @@ logs/*.db
 logs/*.db-journal
 data/uploads/
 evals/results.csv
+evals/results_dashboard.csv
 evals/details/
 
 # служебные файлы запуска
