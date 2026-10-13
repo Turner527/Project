@@ -5,6 +5,7 @@
 import argparse
 import re
 import sqlite3
+import sys
 from collections import Counter
 from contextlib import closing
 from pathlib import Path
@@ -88,6 +89,8 @@ def main() -> None:
     parser.add_argument("--db", default=None, help="путь к SQLite (по умолчанию logs/pilot.db или LOG_DB_PATH)")
     parser.add_argument("--top", type=int, default=5, help="сколько частых вопросов показать")
     args = parser.parse_args()
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
     path = Path(args.db) if args.db else db_path()
     if not path.exists():
         raise SystemExit(f"Журнал {path} не найден: пока не было ни одного запроса.")

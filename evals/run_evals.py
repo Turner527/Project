@@ -101,6 +101,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--details-dir", type=Path, default=DETAILS_DIR)
     args = parser.parse_args(argv)
 
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")  # старые кодировки консоли Windows не знают ✓ и Δ
     load_env()
     os.environ["KPI_DATA_PATH"] = str(datastore.DEFAULT_PATH)  # эталоны посчитаны по демо-витрине
     try:
