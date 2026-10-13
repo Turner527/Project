@@ -122,7 +122,10 @@ class ScriptedLLM:
             sentences.append(f"Отклонение держится {d['months_off_plan_in_row']} мес. подряд, с {d['off_plan_since']}.")
 
         confirming = [r for r in d["related_kpis"] if r["consistent_with_link"] is True]
-        confirming.sort(key=lambda r: (r["most_deviating_segment"] != seg, -abs(r["deviation_pct"] or 0)))
+        # объясняет проблему KPI, отклонившийся в том же сегменте; среди них причина (влияет на выбранный KPI)
+        # важнее последствия (зависит от выбранного KPI)
+        confirming.sort(key=lambda r: (r["most_deviating_segment"] != seg,
+                                       r["relation"] != "влияет на выбранный KPI", -abs(r["deviation_pct"] or 0)))
         driver = confirming[0] if confirming else None
         if driver:
             tail = ""

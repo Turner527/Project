@@ -101,7 +101,8 @@ def _scores(query: str, docs: dict[str, str]) -> list[tuple[str, float]]:
         total = sum(idf[s] for s in st)
         if total and q_total:
             hit = sum(idf[s] for s in st & q)
-            out.append((key, round(0.5 * hit / total + 0.5 * hit / q_total, 3)))
+            full_mention = st <= q  # название целиком в запросе, посторонние слова не в счёт
+            out.append((key, 1.0 if full_mention else round(0.5 * hit / total + 0.5 * hit / q_total, 3)))
     return sorted(out, key=lambda kv: (-kv[1], kv[0]))
 
 

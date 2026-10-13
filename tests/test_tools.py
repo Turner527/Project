@@ -268,3 +268,10 @@ def test_first_kpi_of_each_goal_is_its_headline_kpi(anomalies):
     for a in anomalies["anomalies"]:
         goal = core.find_kpis_by_goal(a["goal"])["goal_matches"][0]
         assert goal["kpis"][0]["kpi"] == a["primary_kpi"], f"{a['id']}: главный KPI цели должен идти первым"
+
+
+def test_full_kpi_name_inside_a_long_question_is_an_exact_match():
+    """Регрессия из evals: посторонние слова вопроса («вклад» ~ «вкладах») не должны ронять точное совпадение."""
+    q = "Какой сегмент сильнее всего влияет на отклонение показателя «Доля просрочки 30+ в рознице» и каков его вклад?"
+    hit = core.find_kpis_by_goal(q)["kpi_matches"][0]
+    assert hit["kpi"] == "Доля просрочки 30+ в рознице" and hit["match_score"] == 1.0

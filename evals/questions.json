@@ -1,0 +1,889 @@
+{
+  "source": "data/anomalies.json",
+  "count": 36,
+  "questions": [
+    {
+      "id": "A1-why_goal",
+      "anomaly": "A1",
+      "type": "why_goal",
+      "question": "Почему мы отстаём по цели «Рост розничного кредитования» и что делать?",
+      "expect": {
+        "key_segment": "Молодёжь",
+        "driver_kpis_any": [
+          "Доля одобрения заявок"
+        ],
+        "cause_label": "Падение одобрения заявок в сегменте «Молодёжь»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -9.2
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 89.7
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A1-explain_kpi",
+      "anomaly": "A1",
+      "type": "explain_kpi",
+      "question": "Объясни отклонение показателя «Выдачи розничных кредитов» от плана за последние 6 месяцев.",
+      "expect": {
+        "key_segment": "Молодёжь",
+        "driver_kpis_any": [
+          "Доля одобрения заявок"
+        ],
+        "cause_label": "Падение одобрения заявок в сегменте «Молодёжь»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -9.2
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 89.7
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A1-which_segment",
+      "anomaly": "A1",
+      "type": "which_segment",
+      "question": "Какой сегмент сильнее всего влияет на отклонение показателя «Выдачи розничных кредитов» и каков его вклад?",
+      "expect": {
+        "key_segment": "Молодёжь",
+        "driver_kpis_any": [],
+        "cause_label": "Падение одобрения заявок в сегменте «Молодёжь»",
+        "numbers": [
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 89.7
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A1-related",
+      "anomaly": "A1",
+      "type": "related",
+      "question": "Какие связанные показатели объясняют ситуацию с показателем «Выдачи розничных кредитов»?",
+      "expect": {
+        "key_segment": "Молодёжь",
+        "driver_kpis_any": [
+          "Доля одобрения заявок"
+        ],
+        "cause_label": "Падение одобрения заявок в сегменте «Молодёжь»",
+        "numbers": [
+          {
+            "name": "driver_deviation_pct",
+            "any_of": [
+              -5.2
+            ]
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A1-board_memo",
+      "anomaly": "A1",
+      "type": "board_memo",
+      "question": "Подготовь записку для правления: что случилось с показателем «Выдачи розничных кредитов» и какие есть варианты действий?",
+      "expect": {
+        "key_segment": "Молодёжь",
+        "driver_kpis_any": [
+          "Доля одобрения заявок"
+        ],
+        "cause_label": "Падение одобрения заявок в сегменте «Молодёжь»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -9.2
+          },
+          {
+            "name": "s1_effect_abs",
+            "value": 26.19
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A1-recovery",
+      "anomaly": "A1",
+      "type": "recovery",
+      "question": "На сколько улучшится показатель «Выдачи розничных кредитов», если вернуть сегмент «Молодёжь» к плану?",
+      "expect": {
+        "key_segment": "Молодёжь",
+        "driver_kpis_any": [],
+        "cause_label": "Падение одобрения заявок в сегменте «Молодёжь»",
+        "numbers": [
+          {
+            "name": "s1_effect_abs",
+            "value": 26.19
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A1-last_3m",
+      "anomaly": "A1",
+      "type": "last_3m",
+      "question": "Что происходит с показателем «Выдачи розничных кредитов» за последние три месяца и в чём причина?",
+      "expect": {
+        "key_segment": "Молодёжь",
+        "driver_kpis_any": [
+          "Доля одобрения заявок"
+        ],
+        "cause_label": "Падение одобрения заявок в сегменте «Молодёжь»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -10.9
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 82.3
+          }
+        ],
+        "window": {
+          "from": "2026-07",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A1-colloquial",
+      "anomaly": "A1",
+      "type": "colloquial",
+      "question": "Шеф спрашивает, что не так с показателем «Выдачи розничных кредитов». Разберись и предложи меры.",
+      "expect": {
+        "key_segment": "Молодёжь",
+        "driver_kpis_any": [
+          "Доля одобрения заявок"
+        ],
+        "cause_label": "Падение одобрения заявок в сегменте «Молодёжь»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -9.2
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A2-why_goal",
+      "anomaly": "A2",
+      "type": "why_goal",
+      "question": "Почему мы отстаём по цели «Качество кредитного портфеля» и что делать?",
+      "expect": {
+        "key_segment": "Самозанятые и ИП",
+        "driver_kpis_any": [
+          "Время решения по кредиту"
+        ],
+        "cause_label": "Сокращение времени решения по кредиту (упрощённая проверка) в сегменте «Самозанятые и ИП» и последующий рост просрочки",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 22.6
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 101.2
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A2-explain_kpi",
+      "anomaly": "A2",
+      "type": "explain_kpi",
+      "question": "Объясни отклонение показателя «Доля просрочки 30+ в рознице» от плана за последние 5 месяцев.",
+      "expect": {
+        "key_segment": "Самозанятые и ИП",
+        "driver_kpis_any": [
+          "Время решения по кредиту"
+        ],
+        "cause_label": "Сокращение времени решения по кредиту (упрощённая проверка) в сегменте «Самозанятые и ИП» и последующий рост просрочки",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 27.4
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 100.0
+          }
+        ],
+        "window": {
+          "from": "2026-05",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A2-which_segment",
+      "anomaly": "A2",
+      "type": "which_segment",
+      "question": "Какой сегмент сильнее всего влияет на отклонение показателя «Доля просрочки 30+ в рознице» и каков его вклад?",
+      "expect": {
+        "key_segment": "Самозанятые и ИП",
+        "driver_kpis_any": [],
+        "cause_label": "Сокращение времени решения по кредиту (упрощённая проверка) в сегменте «Самозанятые и ИП» и последующий рост просрочки",
+        "numbers": [
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 101.2
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A2-related",
+      "anomaly": "A2",
+      "type": "related",
+      "question": "Какие связанные показатели объясняют ситуацию с показателем «Доля просрочки 30+ в рознице»?",
+      "expect": {
+        "key_segment": "Самозанятые и ИП",
+        "driver_kpis_any": [
+          "Время решения по кредиту"
+        ],
+        "cause_label": "Сокращение времени решения по кредиту (упрощённая проверка) в сегменте «Самозанятые и ИП» и последующий рост просрочки",
+        "numbers": [
+          {
+            "name": "driver_deviation_pct",
+            "any_of": [
+              -11.6
+            ]
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A2-board_memo",
+      "anomaly": "A2",
+      "type": "board_memo",
+      "question": "Подготовь записку для правления: что случилось с показателем «Доля просрочки 30+ в рознице» и какие есть варианты действий?",
+      "expect": {
+        "key_segment": "Самозанятые и ИП",
+        "driver_kpis_any": [
+          "Время решения по кредиту"
+        ],
+        "cause_label": "Сокращение времени решения по кредиту (упрощённая проверка) в сегменте «Самозанятые и ИП» и последующий рост просрочки",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 22.6
+          },
+          {
+            "name": "s1_effect_abs",
+            "value": 0.96
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A2-recovery",
+      "anomaly": "A2",
+      "type": "recovery",
+      "question": "На сколько улучшится показатель «Доля просрочки 30+ в рознице», если вернуть сегмент «Самозанятые и ИП» к плану?",
+      "expect": {
+        "key_segment": "Самозанятые и ИП",
+        "driver_kpis_any": [],
+        "cause_label": "Сокращение времени решения по кредиту (упрощённая проверка) в сегменте «Самозанятые и ИП» и последующий рост просрочки",
+        "numbers": [
+          {
+            "name": "s1_effect_abs",
+            "value": 0.96
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A2-last_3m",
+      "anomaly": "A2",
+      "type": "last_3m",
+      "question": "Что происходит с показателем «Доля просрочки 30+ в рознице» за последние три месяца и в чём причина?",
+      "expect": {
+        "key_segment": "Самозанятые и ИП",
+        "driver_kpis_any": [
+          "Время решения по кредиту"
+        ],
+        "cause_label": "Сокращение времени решения по кредиту (упрощённая проверка) в сегменте «Самозанятые и ИП» и последующий рост просрочки",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 34.4
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 99.6
+          }
+        ],
+        "window": {
+          "from": "2026-07",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A2-colloquial",
+      "anomaly": "A2",
+      "type": "colloquial",
+      "question": "Шеф спрашивает, что не так с показателем «Доля просрочки 30+ в рознице». Разберись и предложи меры.",
+      "expect": {
+        "key_segment": "Самозанятые и ИП",
+        "driver_kpis_any": [
+          "Время решения по кредиту"
+        ],
+        "cause_label": "Сокращение времени решения по кредиту (упрощённая проверка) в сегменте «Самозанятые и ИП» и последующий рост просрочки",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 22.6
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A3-why_goal",
+      "anomaly": "A3",
+      "type": "why_goal",
+      "question": "Почему мы отстаём по цели «Рост комиссионных доходов» и что делать?",
+      "expect": {
+        "key_segment": "Премиум",
+        "driver_kpis_any": [
+          "Оборот по картам"
+        ],
+        "cause_label": "Падение оборота по картам в сегменте «Премиум»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -9.5
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 79.1
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A3-explain_kpi",
+      "anomaly": "A3",
+      "type": "explain_kpi",
+      "question": "Объясни отклонение показателя «Комиссионный доход» от плана за последние 5 месяцев.",
+      "expect": {
+        "key_segment": "Премиум",
+        "driver_kpis_any": [
+          "Оборот по картам"
+        ],
+        "cause_label": "Падение оборота по картам в сегменте «Премиум»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -11.0
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 80.7
+          }
+        ],
+        "window": {
+          "from": "2026-05",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A3-which_segment",
+      "anomaly": "A3",
+      "type": "which_segment",
+      "question": "Какой сегмент сильнее всего влияет на отклонение показателя «Комиссионный доход» и каков его вклад?",
+      "expect": {
+        "key_segment": "Премиум",
+        "driver_kpis_any": [],
+        "cause_label": "Падение оборота по картам в сегменте «Премиум»",
+        "numbers": [
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 79.1
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A3-related",
+      "anomaly": "A3",
+      "type": "related",
+      "question": "Какие связанные показатели объясняют ситуацию с показателем «Комиссионный доход»?",
+      "expect": {
+        "key_segment": "Премиум",
+        "driver_kpis_any": [
+          "Оборот по картам"
+        ],
+        "cause_label": "Падение оборота по картам в сегменте «Премиум»",
+        "numbers": [
+          {
+            "name": "driver_deviation_pct",
+            "any_of": [
+              -8.7
+            ]
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A3-board_memo",
+      "anomaly": "A3",
+      "type": "board_memo",
+      "question": "Подготовь записку для правления: что случилось с показателем «Комиссионный доход» и какие есть варианты действий?",
+      "expect": {
+        "key_segment": "Премиум",
+        "driver_kpis_any": [
+          "Оборот по картам"
+        ],
+        "cause_label": "Падение оборота по картам в сегменте «Премиум»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -9.5
+          },
+          {
+            "name": "s1_effect_abs",
+            "value": 5802.87
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A3-recovery",
+      "anomaly": "A3",
+      "type": "recovery",
+      "question": "На сколько улучшится показатель «Комиссионный доход», если вернуть сегмент «Премиум» к плану?",
+      "expect": {
+        "key_segment": "Премиум",
+        "driver_kpis_any": [],
+        "cause_label": "Падение оборота по картам в сегменте «Премиум»",
+        "numbers": [
+          {
+            "name": "s1_effect_abs",
+            "value": 5802.87
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A3-last_3m",
+      "anomaly": "A3",
+      "type": "last_3m",
+      "question": "Что происходит с показателем «Комиссионный доход» за последние три месяца и в чём причина?",
+      "expect": {
+        "key_segment": "Премиум",
+        "driver_kpis_any": [
+          "Оборот по картам"
+        ],
+        "cause_label": "Падение оборота по картам в сегменте «Премиум»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -10.7
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 82.4
+          }
+        ],
+        "window": {
+          "from": "2026-07",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A3-colloquial",
+      "anomaly": "A3",
+      "type": "colloquial",
+      "question": "Шеф спрашивает, что не так с показателем «Комиссионный доход». Разберись и предложи меры.",
+      "expect": {
+        "key_segment": "Премиум",
+        "driver_kpis_any": [
+          "Оборот по картам"
+        ],
+        "cause_label": "Падение оборота по картам в сегменте «Премиум»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -9.5
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A4-why_goal",
+      "anomaly": "A4",
+      "type": "why_goal",
+      "question": "Почему мы отстаём по цели «Привлечение и удержание клиентов» и что делать?",
+      "expect": {
+        "key_segment": "Зарплатные",
+        "driver_kpis_any": [
+          "Активные клиенты",
+          "Остатки на счетах и вкладах физлиц"
+        ],
+        "cause_label": "Рост оттока в сегменте «Зарплатные» с падением числа активных клиентов и остатков",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 11.6
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 113.5
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A4-explain_kpi",
+      "anomaly": "A4",
+      "type": "explain_kpi",
+      "question": "Объясни отклонение показателя «Отток клиентов» от плана за последние 8 месяцев.",
+      "expect": {
+        "key_segment": "Зарплатные",
+        "driver_kpis_any": [
+          "Активные клиенты",
+          "Остатки на счетах и вкладах физлиц"
+        ],
+        "cause_label": "Рост оттока в сегменте «Зарплатные» с падением числа активных клиентов и остатков",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 10.7
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 116.4
+          }
+        ],
+        "window": {
+          "from": "2026-02",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A4-which_segment",
+      "anomaly": "A4",
+      "type": "which_segment",
+      "question": "Какой сегмент сильнее всего влияет на отклонение показателя «Отток клиентов» и каков его вклад?",
+      "expect": {
+        "key_segment": "Зарплатные",
+        "driver_kpis_any": [],
+        "cause_label": "Рост оттока в сегменте «Зарплатные» с падением числа активных клиентов и остатков",
+        "numbers": [
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 113.5
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A4-related",
+      "anomaly": "A4",
+      "type": "related",
+      "question": "Какие связанные показатели объясняют ситуацию с показателем «Отток клиентов»?",
+      "expect": {
+        "key_segment": "Зарплатные",
+        "driver_kpis_any": [
+          "Активные клиенты",
+          "Остатки на счетах и вкладах физлиц"
+        ],
+        "cause_label": "Рост оттока в сегменте «Зарплатные» с падением числа активных клиентов и остатков",
+        "numbers": [
+          {
+            "name": "driver_deviation_pct",
+            "any_of": [
+              -4.1,
+              -5.1
+            ]
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A4-board_memo",
+      "anomaly": "A4",
+      "type": "board_memo",
+      "question": "Подготовь записку для правления: что случилось с показателем «Отток клиентов» и какие есть варианты действий?",
+      "expect": {
+        "key_segment": "Зарплатные",
+        "driver_kpis_any": [
+          "Активные клиенты",
+          "Остатки на счетах и вкладах физлиц"
+        ],
+        "cause_label": "Рост оттока в сегменте «Зарплатные» с падением числа активных клиентов и остатков",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 11.6
+          },
+          {
+            "name": "s1_effect_abs",
+            "value": 0.15
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A4-recovery",
+      "anomaly": "A4",
+      "type": "recovery",
+      "question": "На сколько улучшится показатель «Отток клиентов», если вернуть сегмент «Зарплатные» к плану?",
+      "expect": {
+        "key_segment": "Зарплатные",
+        "driver_kpis_any": [],
+        "cause_label": "Рост оттока в сегменте «Зарплатные» с падением числа активных клиентов и остатков",
+        "numbers": [
+          {
+            "name": "s1_effect_abs",
+            "value": 0.15
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A4-last_3m",
+      "anomaly": "A4",
+      "type": "last_3m",
+      "question": "Что происходит с показателем «Отток клиентов» за последние три месяца и в чём причина?",
+      "expect": {
+        "key_segment": "Зарплатные",
+        "driver_kpis_any": [
+          "Активные клиенты",
+          "Остатки на счетах и вкладах физлиц"
+        ],
+        "cause_label": "Рост оттока в сегменте «Зарплатные» с падением числа активных клиентов и остатков",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 12.7
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 103.7
+          }
+        ],
+        "window": {
+          "from": "2026-07",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "A4-colloquial",
+      "anomaly": "A4",
+      "type": "colloquial",
+      "question": "Шеф спрашивает, что не так с показателем «Отток клиентов». Разберись и предложи меры.",
+      "expect": {
+        "key_segment": "Зарплатные",
+        "driver_kpis_any": [
+          "Активные клиенты",
+          "Остатки на счетах и вкладах физлиц"
+        ],
+        "cause_label": "Рост оттока в сегменте «Зарплатные» с падением числа активных клиентов и остатков",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 11.6
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "C1-control",
+      "anomaly": "C1",
+      "type": "control",
+      "question": "Есть ли проблемы с показателем «Cost/Income»? Нужно ли что-то менять?",
+      "expect": {
+        "key_segment": null,
+        "driver_kpis_any": [],
+        "cause_label": "Значимого отклонения нет",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 1.3
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "C2-control",
+      "anomaly": "C2",
+      "type": "control",
+      "question": "Есть ли проблемы с показателем «Доля цифровых продаж»? Нужно ли что-то менять?",
+      "expect": {
+        "key_segment": null,
+        "driver_kpis_any": [],
+        "cause_label": "Значимого отклонения нет",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -1.2
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "C3-control",
+      "anomaly": "C3",
+      "type": "control",
+      "question": "Есть ли проблемы с показателем «Чистая процентная маржа»? Нужно ли что-то менять?",
+      "expect": {
+        "key_segment": null,
+        "driver_kpis_any": [],
+        "cause_label": "Значимого отклонения нет",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -0.8
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    },
+    {
+      "id": "C4-control",
+      "anomaly": "C4",
+      "type": "control",
+      "question": "Есть ли проблемы с показателем «Чистый процентный доход»? Нужно ли что-то менять?",
+      "expect": {
+        "key_segment": null,
+        "driver_kpis_any": [],
+        "cause_label": "Значимого отклонения нет",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -2.6
+          }
+        ],
+        "window": {
+          "from": "2026-04",
+          "to": "2026-09"
+        }
+      }
+    }
+  ]
+}
