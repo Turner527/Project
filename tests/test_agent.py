@@ -8,7 +8,7 @@ from agent.prompts import FINAL_INSTRUCTION, PROMPT_VERSION, SYSTEM_PROMPT
 from agent.stub_llm import ScriptedLLM
 from agent.tool_adapter import McpStdioBackend, ToolAdapter, make_adapter
 from agent.verifier import STATUS_OK, STATUS_UNVERIFIED
-from tests.helpers import FakeLLM, call, memo_json, text
+from tests.helpers import FakeLLM, activate_flat, call, memo_json, text
 
 QUESTION = "Почему мы отстаём по цели роста розничного кредитования и что делать?"
 
@@ -24,7 +24,7 @@ def adapter():
 def test_stub_pipeline_end_to_end(adapter, anomalies):
     result = Agent(ScriptedLLM(), adapter).run(QUESTION)
     assert result.error is None and result.memo is not None
-    assert [c.name for c in result.tool_calls] == ["find_kpis_by_goal", "diagnose_deviation"]
+    assert [c.name for c in result.tool_calls] == ["find_metrics", "diagnose_change"]
     assert result.verification.status == STATUS_OK and result.verification.checked >= 10
 
     a1 = next(a for a in anomalies["anomalies"] if a["id"] == "A1")
@@ -45,14 +45,14 @@ def test_stub_pipeline_end_to_end(adapter, anomalies):
 def test_stub_respects_period_in_question(adapter):
     result = Agent(ScriptedLLM(), adapter).run("Что с выдачами розничных кредитов за последние 3 месяца?")
     diag = result.tool_calls[-1]
-    assert diag.arguments["last_months"] == 3 and diag.result["period"]["months_count"] == 3
+    assert diag.arguments["last_months"] == 3 and diag.result["period"]["periods"] == 3
     assert result.verification.ok
 
 
 def test_stub_on_healthy_kpi_says_no_deviation(adapter):
     result = Agent(ScriptedLLM(), adapter).run("Есть ли проблемы с показателем «Cost/Income»?")
     assert result.memo.diagnosis.key_segments == [] and result.memo.scenarios == []
-    assert "Значимого отклонения нет" in result.memo.diagnosis.root_cause
+    assert "Значимого изменения нет" in result.memo.diagnosis.root_cause
     assert result.verification.ok
 
 
@@ -67,7 +67,7 @@ def test_agent_works_through_real_mcp_server():
     try:
         result = Agent(ScriptedLLM(), mcp).run(QUESTION)
         assert result.error is None and result.verification.ok
-        assert [c.name for c in result.tool_calls] == ["find_kpis_by_goal", "diagnose_deviation"]
+        assert [c.name for c in result.tool_calls] == ["find_metrics", "diagnose_change"]
     finally:
         mcp.close()
 
@@ -76,15 +76,15 @@ def test_agent_works_through_real_mcp_server():
 
 
 def test_messages_follow_gigachat_function_protocol(adapter):
-    llm = FakeLLM([call("get_deviation", kpi="NPS"), text("Хватит."), text(memo_json())])
+    llm = FakeLLM([call("get_change", metric="NPS"), text("Хватит."), text(memo_json())])
     Agent(llm, adapter).run("Как дела с NPS?")
     second = llm.calls[1]["messages"]
     assert [m["role"] for m in second] == ["system", "user", "assistant", "function"]
     assistant, function = second[2], second[3]
-    assert assistant["function_call"] == {"name": "get_deviation", "arguments": {"kpi": "NPS"}}
-    assert function["name"] == "get_deviation"
+    assert assistant["function_call"] == {"name": "get_change", "arguments": {"metric": "NPS"}}
+    assert function["name"] == "get_change"
     payload = json.loads(function["content"])  # результат инструмента — JSON-строка
-    assert payload["kpi"] == "NPS" and payload["call_id"].startswith("c_")
+    assert payload["metric"] == "NPS" and payload["call_id"].startswith("c_")
     assert llm.calls[0]["functions"] and llm.calls[0]["function_call"] == "auto"
 
 
@@ -107,7 +107,7 @@ def test_system_prompt_states_the_main_rules(adapter):
 
 
 def test_step_limit_is_six_function_calls_then_final(adapter):
-    endless = [call("get_deviation", kpi="NPS") for _ in range(10)]
+    endless = [call("get_change", metric="NPS") for _ in range(10)]
     llm = FakeLLM(endless[:MAX_STEPS] + [text(memo_json())])
     result = Agent(llm, adapter).run("вопрос")
     assert MAX_STEPS == 6 and result.steps == 6 and len(result.tool_calls) == 6
@@ -153,7 +153,7 @@ def test_fabricated_number_in_memo_is_marked_unverified(adapter):
         scenarios=[{"name": "Сценарий", "description": "Описание", "effect_estimate": "Эффект 55,55 млн ₽",
                     "assumptions": ["Допущение"]}],
     )
-    llm = FakeLLM([call("get_deviation", kpi="NPS"), text("ок"), text(memo)])
+    llm = FakeLLM([call("get_change", metric="NPS"), text("ок"), text(memo)])
     result = Agent(llm, adapter).run("Как дела с NPS?")
     assert result.verification.status == STATUS_UNVERIFIED
     flagged = {u.value for u in result.verification.unverified}
@@ -161,7 +161,7 @@ def test_fabricated_number_in_memo_is_marked_unverified(adapter):
 
 
 def test_invented_call_ids_are_dropped_from_used_calls(adapter):
-    llm = FakeLLM([call("get_deviation", kpi="NPS"), text("ок"), text(memo_json(used=["c_deadbeef"]))])
+    llm = FakeLLM([call("get_change", metric="NPS"), text("ок"), text(memo_json(used=["c_deadbeef"]))])
     result = Agent(llm, adapter).run("Как дела с NPS?")
     assert "c_deadbeef" not in result.memo.used_tool_calls
     assert result.verification.unknown_call_ids == ["c_deadbeef"]
@@ -183,7 +183,7 @@ def test_llm_failure_is_returned_as_error(adapter):
 
 
 def test_tokens_are_summed_over_all_calls(adapter):
-    llm = FakeLLM([call("get_deviation", kpi="NPS"), text("ок"), text("мусор"), text(memo_json())])
+    llm = FakeLLM([call("get_change", metric="NPS"), text("ок"), text("мусор"), text(memo_json())])
     result = Agent(llm, adapter).run("вопрос")
     assert result.usage.total_tokens == 15 + 30 + 30 + 30
 
@@ -205,3 +205,63 @@ def test_backend_crash_is_reported_in_result_not_raised():
 
     result = Agent(FakeLLM([]), BrokenAdapter()).run("вопрос")
     assert result.memo is None and "Внутренняя ошибка агента" in result.error and "MCP-сервер не запустился" in result.error
+
+
+# ---------- плоские отчёты: тот же конвейер, но каталог и вопросы берутся из самих данных ----------
+
+
+def test_system_prompt_catalog_describes_the_active_flat_report(adapter, tmp_path, monkeypatch):
+    activate_flat(tmp_path, monkeypatch, "marketing")
+    llm = FakeLLM([text("ок"), text(memo_json())])
+    Agent(llm, adapter).run("вопрос")
+    system = llm.calls[0]["messages"][0]["content"]
+    assert system.startswith(SYSTEM_PROMPT) and "marketing.xlsx" in system
+    for fragment in ("2026-08-01", "2026-09-30", "дни", "CTR", "Конверсия в лиды", "Канал", "Поиск", "Кампания"):
+        assert fragment in system, fragment
+    assert "Молодёжь" not in system and "2025-04" not in system  # справка о демо-данных не просочилась
+
+
+def test_stub_explains_a_ratio_through_its_numerator_in_the_same_channel(adapter, tmp_path, monkeypatch):
+    activate_flat(tmp_path, monkeypatch, "marketing")
+    result = Agent(ScriptedLLM(), adapter).run("Почему упала конверсия в лиды и в каком канале?")
+    assert result.error is None and result.verification.ok
+    assert [c.name for c in result.tool_calls] == ["find_metrics", "diagnose_change"]
+    assert result.tool_calls[1].arguments == {"metric": "Конверсия в лиды"}
+    memo = result.memo.diagnosis
+    assert memo.key_segments == ["Поиск"] and memo.root_cause == "Лиды: изменение сосредоточено — канал «Поиск»"
+    assert "предыдущий период" in memo.summary and "Составляющая формулы «Лиды»" in memo.summary
+    assert result.memo.scenarios and "Эффект" in result.memo.scenarios[0].effect_estimate
+
+
+def test_stub_does_not_call_a_consequence_the_cause(adapter, tmp_path, monkeypatch):
+    activate_flat(tmp_path, monkeypatch, "marketing")
+    result = Agent(ScriptedLLM(), adapter).run("Почему выросли расходы?")
+    memo = result.memo.diagnosis
+    assert result.verification.ok and memo.key_segments == ["Поиск"]
+    assert memo.root_cause == "Изменение сосредоточено: канал «Поиск»"  # «Стоимость лида» — следствие роста расходов
+    assert "Следствие — показатель" in memo.summary
+    assert any("не объясняют изменение" in c for c in result.memo.manual_checks)
+
+
+def test_stub_respects_a_scope_and_a_period_on_a_flat_report(adapter, tmp_path, monkeypatch):
+    activate_flat(tmp_path, monkeypatch, "support")
+    result = Agent(ScriptedLLM(), adapter).run("Что со временем обработки в очереди Техническая поддержка за последние 14 дней?")
+    diag = result.tool_calls[-1]
+    assert diag.arguments == {"metric": "Среднее время обработки", "last_days": 14, "where_dimension": "Очередь",
+                              "where_value": "Техническая поддержка"}
+    assert diag.result["period"]["periods"] == 14 and diag.result["filter"] == {"Очередь": "Техническая поддержка"}
+    assert result.verification.ok and result.memo.diagnosis.key_segments == ["Чат", "Телефон"]
+
+
+def test_no_significant_change_means_no_causes_and_no_scenarios(adapter, tmp_path, monkeypatch):
+    activate_flat(tmp_path, monkeypatch, "branches")
+    result = Agent(ScriptedLLM(), adapter).run("Что с доходом за последние 3 месяца?")
+    assert result.memo.diagnosis.key_segments == [] and result.memo.scenarios == []
+    assert "Значимого изменения нет" in result.memo.diagnosis.root_cause and result.verification.ok
+
+
+def test_a_fabricated_number_is_caught_on_a_flat_report_too(adapter, tmp_path, monkeypatch):
+    activate_flat(tmp_path, monkeypatch, "marketing")
+    memo = memo_json(summary="Расходы выросли на 99,9% за период.")
+    result = Agent(FakeLLM([call("get_change", metric="Расходы"), text("ок"), text(memo)]), adapter).run("Что с расходами?")
+    assert result.verification.status == STATUS_UNVERIFIED and {u.value for u in result.verification.unverified} == {"99,9"}

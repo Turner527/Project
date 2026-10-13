@@ -9,7 +9,7 @@ import math
 from collections import defaultdict
 
 from agent.verifier import STATUS_OK, extract_numbers, numbers_match
-from tools.core import _stems  # та же нормализация названий, что при поиске KPI
+from tools.text import stems as _stems  # та же нормализация названий, что при поиске показателей
 
 
 def mentioned(name: str, text: str) -> bool:

@@ -7,12 +7,13 @@ from agent.tool_adapter import DirectBackend, McpStdioBackend, ToolAdapter, make
 from tools.core import TOOLS
 
 EXPECTED_TOOLS = {
-    "find_kpis_by_goal",
-    "get_deviation",
-    "break_down_by_segment",
-    "get_related_kpis",
+    "describe_dataset",
+    "find_metrics",
+    "get_change",
+    "break_down",
+    "get_related_metrics",
     "get_goal_info",
-    "diagnose_deviation",
+    "diagnose_change",
 }
 
 
@@ -49,10 +50,10 @@ def test_schemas_become_valid_gigachat_functions(direct_adapter):
         for prop in f["parameters"]["properties"].values():
             assert set(prop) <= {"type", "description", "enum", "items"}  # без anyOf/title/default
             assert prop["type"] in {"string", "number", "integer", "boolean", "array", "object"}
-    diag = next(f for f in functions if f["name"] == "diagnose_deviation")
-    assert diag["parameters"]["required"] == ["kpi"]
+    diag = next(f for f in functions if f["name"] == "diagnose_change")
+    assert diag["parameters"]["required"] == ["metric"]
     assert diag["parameters"]["properties"]["period_from"]["type"] == "string"
-    assert "ГГГГ-ММ" in diag["parameters"]["properties"]["period_from"]["description"]
+    assert "2026-09" in diag["parameters"]["properties"]["period_from"]["description"]
 
 
 def test_optional_and_nullable_schema_is_flattened():
@@ -80,10 +81,10 @@ def test_mcp_and_direct_schemas_are_identical(mcp_adapter, direct_adapter):
 @pytest.mark.parametrize(
     "name, args",
     [
-        ("find_kpis_by_goal", {"query": "розничное кредитование"}),
-        ("diagnose_deviation", {"kpi": "Выдачи розничных кредитов"}),
-        ("break_down_by_segment", {"kpi": "Комиссионный доход", "period_from": "2026-05", "period_to": "2026-09"}),
-        ("get_deviation", {"kpi": "Несуществующий KPI"}),
+        ("find_metrics", {"query": "розничное кредитование"}),
+        ("diagnose_change", {"metric": "Выдачи розничных кредитов"}),
+        ("break_down", {"metric": "Комиссионный доход", "period_from": "2026-05", "period_to": "2026-09"}),
+        ("get_change", {"metric": "Несуществующий KPI"}),
     ],
 )
 def test_mcp_result_equals_direct_result(mcp_adapter, direct_adapter, name, args):
@@ -94,25 +95,25 @@ def test_mcp_result_equals_direct_result(mcp_adapter, direct_adapter, name, args
 
 
 def test_error_results_are_recorded_not_raised(direct_adapter):
-    rec = direct_adapter.call("get_deviation", {"kpi": "Совсем левый показатель"})
+    rec = direct_adapter.call("get_change", {"metric": "Совсем левый показатель"})
     assert rec.error and "не найден" in rec.error
     assert direct_adapter.call("no_such_tool", {}).error.startswith("Неизвестный инструмент")
-    assert "Неверные аргументы" in direct_adapter.call("get_deviation", {"wrong": 1}).error
+    assert "Неверные аргументы" in direct_adapter.call("get_change", {"wrong": 1}).error
 
 
 def test_mcp_bad_arguments_do_not_crash_the_session(mcp_adapter):
-    bad = mcp_adapter.call("get_deviation", {"wrong": 1})
+    bad = mcp_adapter.call("get_change", {"wrong": 1})
     assert bad.error
-    good = mcp_adapter.call("get_deviation", {"kpi": "NPS"})
-    assert good.error is None and good.result["kpi"] == "NPS"
+    good = mcp_adapter.call("get_change", {"metric": "NPS"})
+    assert good.error is None and good.result["metric"] == "NPS"
 
 
 def test_mcp_backend_restarts_after_close():
     adapter = ToolAdapter(McpStdioBackend())
     try:
-        assert adapter.call("get_deviation", {"kpi": "NPS"}).error is None
+        assert adapter.call("get_change", {"metric": "NPS"}).error is None
         adapter.backend.close()
-        assert adapter.call("get_deviation", {"kpi": "NPS"}).error is None
+        assert adapter.call("get_change", {"metric": "NPS"}).error is None
     finally:
         adapter.close()
 

@@ -35,7 +35,7 @@ def test_log_request_stores_everything_needed(store, good_result):
     import json
 
     calls = json.loads(row["tool_calls"])
-    assert [c["tool"] for c in calls] == ["find_kpis_by_goal", "diagnose_deviation"]
+    assert [c["tool"] for c in calls] == ["find_metrics", "diagnose_change"]
     assert calls[1]["arguments"] and calls[1]["result"]["call_id"] == calls[1]["call_id"]
     assert json.loads(row["answer"])["diagnosis"]["key_segments"] == ["Молодёжь"]
 

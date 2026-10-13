@@ -15,18 +15,31 @@ from agent.loop import Agent
 from agent.prompts import PROMPT_VERSION
 from agent.tool_adapter import ToolAdapter, make_adapter
 from app import connect as connect_mod
-from data.validation import WorkbookError
+from data.profile import profile
+from data.readers import read_file
+from data.validation import WorkbookError, check_zip_size
 from logs.store import STATUS_ERROR, LogStore
 from tools import datastore
+from tools.engine import suggest_questions
 
 STATIC_DIR = Path(__file__).parent / "static"
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 XLSX_MAGIC = b"PK\x03\x04"  # xlsx — это zip-архив
 
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
     client_id: str | None = Field(default=None, max_length=64)
+
+
+class ProfileRequest(BaseModel):
+    upload_id: str
+    sheet: str | None = None
+
+
+class ConfirmRequest(BaseModel):
+    upload_id: str
+    spec: dict
 
 
 class FeedbackRequest(BaseModel):
@@ -77,6 +90,7 @@ def create_app(
             "tools_backend": (os.getenv("TOOLS_BACKEND") or "mcp").lower(),
             "prompt_version": PROMPT_VERSION,
             "dataset": datastore.describe(),
+            "questions": suggest_questions(datastore.get_table()),
         }
 
     @app.post("/api/ask")
@@ -118,21 +132,71 @@ def create_app(
 
     @app.post("/api/upload")
     def upload(file: UploadFile = File(...)) -> JSONResponse:
+        """Стратегический xlsx (goals/facts/links) принимается сразу; любой другой отчёт (xlsx, csv) идёт на проверку
+        ролей столбцов: в ответе профиль и upload_id для /api/datasets/confirm."""
         name = file.filename or "файл"
-        if not name.lower().endswith(".xlsx"):
-            return _upload_error(f"Файл «{name}» не в формате .xlsx. Загрузите книгу Excel (.xlsx).")
+        lower = name.lower()
+        if lower.endswith(".xls"):
+            return _upload_error("Формат .xls устарел: откройте файл в Excel и сохраните как .xlsx или .csv.")
+        if not lower.endswith((".xlsx", ".csv")):
+            return _upload_error(f"Файл «{name}» не в формате .xlsx или .csv. Загрузите книгу Excel или csv-таблицу.")
         content = file.file.read(MAX_UPLOAD_BYTES + 1)
         if len(content) > MAX_UPLOAD_BYTES:
             return _upload_error(f"Файл больше {MAX_UPLOAD_BYTES // 1024 // 1024} МБ.", 413)
-        if not content.startswith(XLSX_MAGIC):
+        if lower.endswith(".xlsx") and not content.startswith(XLSX_MAGIC):
             return _upload_error(f"Файл «{name}» не похож на книгу Excel (.xlsx): повреждён или другого формата.")
         try:
-            dataset = datastore.save_upload(content)
+            if lower.endswith(".xlsx") and _is_strategic(content):
+                dataset = datastore.save_upload(content)
+                return JSONResponse({"ok": True, "mode": "ready", "dataset": dataset,
+                                     "questions": suggest_questions(datastore.get_table())})
+            raw = read_file(content, name)
+            report = profile(raw)
         except WorkbookError as exc:
             return _upload_error("Файл не прошёл проверку.", errors=exc.errors)
-        return JSONResponse({"ok": True, "dataset": dataset})
+        upload_id = datastore.save_pending(content, name, raw.kind)
+        return JSONResponse({"ok": True, "mode": "review", "upload_id": upload_id, "profile": report})
+
+    @app.post("/api/datasets/profile")
+    def reprofile(req: ProfileRequest) -> JSONResponse:
+        """Профиль другого листа уже загруженного файла."""
+        try:
+            content, name, _ = datastore.load_pending(req.upload_id)
+            return JSONResponse({"ok": True, "profile": profile(read_file(content, name), req.sheet)})
+        except WorkbookError as exc:
+            return _upload_error("Не удалось прочитать файл.", errors=exc.errors)
+
+    @app.post("/api/datasets/confirm")
+    def confirm(req: ConfirmRequest) -> JSONResponse:
+        """Проверяет подтверждённые пользователем роли столбцов и делает отчёт активным."""
+        try:
+            dataset = datastore.save_flat(req.upload_id, req.spec)
+        except WorkbookError as exc:
+            return _upload_error("Настройки столбцов не прошли проверку.", errors=exc.errors)
+        return JSONResponse({"ok": True, "dataset": dataset, "questions": suggest_questions(datastore.get_table())})
+
+    @app.delete("/api/upload")
+    def reset_dataset() -> JSONResponse:
+        """Вернуться к демо-данным."""
+        return JSONResponse({"ok": True, "dataset": datastore.reset(), "questions": suggest_questions(datastore.get_table())})
 
     return app
+
+
+def _is_strategic(content: bytes) -> bool:
+    """Книга в стратегическом формате: есть как минимум два из листов goals, facts, links."""
+    try:
+        import io
+
+        import openpyxl
+
+        check_zip_size(content)
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
+        names = {n.strip().lower() for n in wb.sheetnames}
+        wb.close()
+    except Exception:  # noqa: BLE001 — любую проблему чтения подробно опишет read_file
+        return False
+    return len(names & {"goals", "facts", "links"}) >= 2
 
 
 def _upload_error(message: str, status_code: int = 422, errors: list[str] | None = None) -> JSONResponse:

@@ -46,7 +46,7 @@ class FakeLLM:
         if self.chat_exc:
             raise self.chat_exc
         if functions:
-            call = FunctionCall("get_deviation", {"kpi": "NPS"}) if self.calls_function else None
+            call = FunctionCall("get_change", {"metric": "NPS"}) if self.calls_function else None
             return LLMResponse(content="" if call else "Отклонение небольшое", function_call=call, usage=Usage(5, 5, 10))
         return LLMResponse(content="ок", usage=Usage(5, 1, 6))
 

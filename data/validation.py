@@ -65,6 +65,18 @@ def _suggest(name: str, options: list[str]) -> str:
     return f" Возможно, имелось в виду «{close[0]}»." if close else ""
 
 
+def check_zip_size(data: bytes) -> None:
+    """xlsx — это zip: не даём распаковать «бомбу». Бросает WorkbookError, если содержимое слишком велико."""
+    if zipfile.is_zipfile(io.BytesIO(data)):
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            unpacked = sum(info.file_size for info in archive.infolist())
+        if unpacked > MAX_UNPACKED_BYTES:
+            raise WorkbookError(
+                [f"Файл слишком большой после распаковки ({unpacked // 1024 // 1024} МБ, допустимо не более "
+                 f"{MAX_UNPACKED_BYTES // 1024 // 1024} МБ). Уберите лишние листы и данные."]
+            )
+
+
 def _read_workbook(source: str | Path | bytes | BinaryIO) -> dict[str, pd.DataFrame]:
     try:
         if isinstance(source, (str, Path)):
@@ -73,14 +85,7 @@ def _read_workbook(source: str | Path | bytes | BinaryIO) -> dict[str, pd.DataFr
             data = bytes(source)
         else:
             data = source.read()
-        if zipfile.is_zipfile(io.BytesIO(data)):  # xlsx — это zip: не даём распаковать «бомбу»
-            with zipfile.ZipFile(io.BytesIO(data)) as archive:
-                unpacked = sum(info.file_size for info in archive.infolist())
-            if unpacked > MAX_UNPACKED_BYTES:
-                raise WorkbookError(
-                    [f"Файл слишком большой после распаковки ({unpacked // 1024 // 1024} МБ, допустимо не более "
-                     f"{MAX_UNPACKED_BYTES // 1024 // 1024} МБ). Уберите лишние листы и данные."]
-                )
+        check_zip_size(data)
         return pd.read_excel(io.BytesIO(data), sheet_name=None, dtype=object, engine="openpyxl")
     except WorkbookError:
         raise

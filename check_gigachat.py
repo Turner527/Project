@@ -202,16 +202,16 @@ def check_function_calling(llm: GigaChatLLM) -> Result:
     from agent.tool_adapter import make_adapter
 
     adapter = make_adapter("direct")
-    functions = [f for f in adapter.functions if f["name"] == "get_deviation"]
+    functions = [f for f in adapter.functions if f["name"] == "get_change"]
     try:
         resp = llm.chat(
             [{"role": "system", "content": "Ты аналитик. Для чисел вызывай функции, сам не считай."},
-             {"role": "user", "content": "Каково отклонение факта от плана по KPI «NPS»?"}],
+             {"role": "user", "content": "Каково изменение показателя «NPS» за последний период?"}],
             functions, function_call="auto")
     except LLMError as exc:
         return Result(FAIL, "Вызов функций", str(exc))
-    if resp.function_call and resp.function_call.name == "get_deviation":
-        return Result(OK, "Вызов функций", f"модель вызвала get_deviation с аргументами {resp.function_call.arguments}")
+    if resp.function_call and resp.function_call.name == "get_change":
+        return Result(OK, "Вызов функций", f"модель вызвала get_change с аргументами {resp.function_call.arguments}")
     return Result(WARN, "Вызов функций", "модель ответила текстом вместо вызова функции.",
                   "Агент будет работать нестабильно: возьмите более сильную модель (GigaChat-2-Pro или GigaChat-2-Max).")
 

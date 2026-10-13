@@ -45,10 +45,10 @@ def test_expected_numbers_come_from_the_reference_not_from_the_tools(anomalies):
     for a in anomalies["anomalies"]:
         q = questions[f"{a['id']}-explain_kpi"]
         window = q["expect"]["window"]
-        dev = core.diagnose_deviation(a["primary_kpi"], window["from"], window["to"])
+        dev = core.diagnose_change(a["primary_kpi"], window["from"], window["to"])
         by_name = {n["name"]: n["value"] for n in q["expect"]["numbers"]}
         assert dev["deviation"]["deviation_pct"] == by_name["deviation_pct"]
-        assert dev["breakdown"]["top_segment_contribution_pct"] == by_name["key_segment_contribution_pct"]
+        assert dev["dimensions"][0]["top"][0]["contribution_pct"] == by_name["key_segment_contribution_pct"]
 
 
 # ---------- метрика «причина названа верно» ----------
@@ -117,7 +117,7 @@ def test_evaluate_scores_wrong_and_fabricated_answers_as_failures():
     wrong = memo_json(summary="Отклонение 12,34% в сегменте Премиум.")
     wrong = json.loads(wrong)
     wrong["diagnosis"]["key_segments"] = ["Премиум"]
-    result = run_fake(call("get_deviation", kpi="Выдачи розничных кредитов"), text("ок"), text(json.dumps(wrong)))
+    result = run_fake(call("get_change", metric="Выдачи розничных кредитов"), text("ок"), text(json.dumps(wrong)))
     item = evaluate(result, QUESTION)
     assert item["cause_ok"] is False and item["numbers_ok"] is False
     assert item["status"] == "есть непроверенные числа" and "12,34" in item["unverified"]
@@ -180,7 +180,7 @@ def test_runner_writes_table_and_details_and_compares_with_previous_run(paths, c
         rows = list(csv.DictReader(fh))
     assert [r["note"] for r in rows] == ["первый", "второй"] and [r["n"] for r in rows] == ["4", "2"]
     first = rows[0]
-    assert first["llm"] == "stub" and first["prompt_version"].startswith("v1-") and first["date"].endswith("+00:00")
+    assert first["llm"] == "stub" and first["prompt_version"].startswith("v2-") and first["date"].endswith("+00:00")
     assert first["dataset"] == "kpi.xlsx" and float(first["cause_accuracy"]) == 1.0
     assert list(first) == run_evals.COLUMNS
 

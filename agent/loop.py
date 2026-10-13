@@ -85,7 +85,7 @@ class Agent:
         try:
             functions = self.adapter.functions
             messages = [
-                {"role": "system", "content": build_system_prompt(datastore.get_dataset().summary())},
+                {"role": "system", "content": build_system_prompt(datastore.get_table())},
                 {"role": "user", "content": question},
             ]
             for _ in range(self.max_steps):
