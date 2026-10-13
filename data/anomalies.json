@@ -1,0 +1,482 @@
+{
+  "meta": {
+    "seed": 20260101,
+    "first_month": "2025-04",
+    "last_month": "2026-09",
+    "significant_deviation_pct": 3.0,
+    "default_window_months": 6
+  },
+  "anomalies": [
+    {
+      "id": "A1",
+      "title": "Отставание по выдачам розничных кредитов из-за сегмента «Молодёжь»",
+      "goal": "Рост розничного кредитования",
+      "primary_kpi": "Выдачи розничных кредитов",
+      "key_segment": "Молодёжь",
+      "cause_label": "Падение одобрения заявок в сегменте «Молодёжь»",
+      "hidden_story": "С апреля 2026 ужесточён скоринг для молодёжных кредитов: доля одобрения заявок упала, выдачи сегмента ушли ниже плана почти вдвое. Остальные сегменты в норме.",
+      "driver_kpis_any": [
+        "Доля одобрения заявок"
+      ],
+      "period_start": "2026-04",
+      "owner": "Директор департамента розничного бизнеса",
+      "effects": [
+        {
+          "kpi": "Доля одобрения заявок",
+          "segment": "Молодёжь",
+          "start": "2026-04",
+          "amplitude": -0.28,
+          "shape": "ramp",
+          "ramp_months": 2
+        },
+        {
+          "kpi": "Выдачи розничных кредитов",
+          "segment": "Молодёжь",
+          "start": "2026-04",
+          "amplitude": -0.5,
+          "shape": "ramp",
+          "ramp_months": 2
+        }
+      ],
+      "checkpoints": {
+        "full": {
+          "from": "2026-04",
+          "to": "2026-09",
+          "plan": 317.19,
+          "fact": 287.11,
+          "expected": {
+            "deviation_abs": -30.08,
+            "deviation_pct": -9.5,
+            "key_segment_contribution_pct": 86.7,
+            "key_segment_deviation_pct": -45.7,
+            "s1_effect_abs": 26.09
+          },
+          "drivers": {
+            "Доля одобрения заявок": {
+              "deviation_pct": -5.4,
+              "key_segment_deviation_pct": -26.2
+            }
+          }
+        },
+        "last_6m": {
+          "from": "2026-04",
+          "to": "2026-09",
+          "plan": 317.19,
+          "fact": 287.11,
+          "expected": {
+            "deviation_abs": -30.08,
+            "deviation_pct": -9.5,
+            "key_segment_contribution_pct": 86.7,
+            "key_segment_deviation_pct": -45.7,
+            "s1_effect_abs": 26.09
+          },
+          "drivers": {
+            "Доля одобрения заявок": {
+              "deviation_pct": -5.4,
+              "key_segment_deviation_pct": -26.2
+            }
+          }
+        },
+        "last_3m": {
+          "from": "2026-07",
+          "to": "2026-09",
+          "plan": 163.54,
+          "fact": 147.02,
+          "expected": {
+            "deviation_abs": -16.52,
+            "deviation_pct": -10.1,
+            "key_segment_contribution_pct": 88.3,
+            "key_segment_deviation_pct": -49.5,
+            "s1_effect_abs": 14.58
+          },
+          "drivers": {
+            "Доля одобрения заявок": {
+              "deviation_pct": -5.9,
+              "key_segment_deviation_pct": -29.2
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "A2",
+      "title": "Рост просрочки 30+ в сегменте «Самозанятые и ИП» после упрощения проверки заёмщиков",
+      "goal": "Качество кредитного портфеля",
+      "primary_kpi": "Доля просрочки 30+ в рознице",
+      "key_segment": "Самозанятые и ИП",
+      "cause_label": "Сокращение времени решения по кредиту (упрощённая проверка) в сегменте «Самозанятые и ИП» и последующий рост просрочки",
+      "hidden_story": "С февраля 2026 для самозанятых и ИП упрощена проверка заёмщиков: время решения сократилось на 40%. С лагом в три месяца выросли просрочка 30+ и стоимость риска — побочный эффект ускорения выдач.",
+      "driver_kpis_any": [
+        "Время решения по кредиту"
+      ],
+      "period_start": "2026-05",
+      "owner": "Директор по рискам",
+      "effects": [
+        {
+          "kpi": "Время решения по кредиту",
+          "segment": "Самозанятые и ИП",
+          "start": "2026-02",
+          "amplitude": -0.4,
+          "shape": "ramp",
+          "ramp_months": 2
+        },
+        {
+          "kpi": "Доля просрочки 30+ в рознице",
+          "segment": "Самозанятые и ИП",
+          "start": "2026-05",
+          "amplitude": 0.9,
+          "shape": "ramp",
+          "ramp_months": 3
+        },
+        {
+          "kpi": "Стоимость риска",
+          "segment": "Самозанятые и ИП",
+          "start": "2026-05",
+          "amplitude": 0.6,
+          "shape": "ramp",
+          "ramp_months": 3
+        }
+      ],
+      "checkpoints": {
+        "full": {
+          "from": "2026-05",
+          "to": "2026-09",
+          "plan": 4.2,
+          "fact": 5.38,
+          "expected": {
+            "deviation_abs": 1.18,
+            "deviation_pct": 28.2,
+            "key_segment_contribution_pct": 93.2,
+            "key_segment_deviation_pct": 74.2,
+            "s1_effect_abs": 1.1
+          },
+          "drivers": {
+            "Время решения по кредиту": {
+              "deviation_pct": -12.6,
+              "key_segment_deviation_pct": -37.3
+            }
+          }
+        },
+        "last_6m": {
+          "from": "2026-04",
+          "to": "2026-09",
+          "plan": 4.2,
+          "fact": 5.2,
+          "expected": {
+            "deviation_abs": 1.0,
+            "deviation_pct": 23.8,
+            "key_segment_contribution_pct": 92.2,
+            "key_segment_deviation_pct": 62.2,
+            "s1_effect_abs": 0.92
+          },
+          "drivers": {
+            "Время решения по кредиту": {
+              "deviation_pct": -12.1,
+              "key_segment_deviation_pct": -37.4
+            }
+          }
+        },
+        "last_3m": {
+          "from": "2026-07",
+          "to": "2026-09",
+          "plan": 4.2,
+          "fact": 5.64,
+          "expected": {
+            "deviation_abs": 1.44,
+            "deviation_pct": 34.4,
+            "key_segment_contribution_pct": 93.6,
+            "key_segment_deviation_pct": 91.1,
+            "s1_effect_abs": 1.35
+          },
+          "drivers": {
+            "Время решения по кредиту": {
+              "deviation_pct": -13.6,
+              "key_segment_deviation_pct": -39.4
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "A3",
+      "title": "Недобор комиссионного дохода из-за падения оборота по картам в сегменте «Премиум»",
+      "goal": "Рост комиссионных доходов",
+      "primary_kpi": "Комиссионный доход",
+      "key_segment": "Премиум",
+      "cause_label": "Падение оборота по картам в сегменте «Премиум»",
+      "hidden_story": "С мая 2026 изменены условия кешбэка по премиальным картам: клиенты Премиум перенесли траты на карты других банков, оборот по картам и комиссии сегмента просели, NPS снизился.",
+      "driver_kpis_any": [
+        "Оборот по картам"
+      ],
+      "period_start": "2026-05",
+      "owner": "Директор по транзакционному бизнесу",
+      "effects": [
+        {
+          "kpi": "Оборот по картам",
+          "segment": "Премиум",
+          "start": "2026-05",
+          "amplitude": -0.38,
+          "shape": "ramp",
+          "ramp_months": 1
+        },
+        {
+          "kpi": "Комиссионный доход",
+          "segment": "Премиум",
+          "start": "2026-05",
+          "amplitude": -0.32,
+          "shape": "ramp",
+          "ramp_months": 1
+        },
+        {
+          "kpi": "NPS",
+          "segment": "Премиум",
+          "start": "2026-05",
+          "amplitude": -0.12,
+          "shape": "ramp",
+          "ramp_months": 2
+        }
+      ],
+      "checkpoints": {
+        "full": {
+          "from": "2026-05",
+          "to": "2026-09",
+          "plan": 64837.76,
+          "fact": 57449.13,
+          "expected": {
+            "deviation_abs": -7388.63,
+            "deviation_pct": -11.4,
+            "key_segment_contribution_pct": 83.3,
+            "key_segment_deviation_pct": -33.8,
+            "s1_effect_abs": 6151.67
+          },
+          "drivers": {
+            "Оборот по картам": {
+              "deviation_pct": -12.2,
+              "key_segment_deviation_pct": -40.3
+            }
+          }
+        },
+        "last_6m": {
+          "from": "2026-04",
+          "to": "2026-09",
+          "plan": 76869.92,
+          "fact": 69391.09,
+          "expected": {
+            "deviation_abs": -7478.83,
+            "deviation_pct": -9.7,
+            "key_segment_contribution_pct": 82.4,
+            "key_segment_deviation_pct": -28.6,
+            "s1_effect_abs": 6165.05
+          },
+          "drivers": {
+            "Оборот по картам": {
+              "deviation_pct": -10.8,
+              "key_segment_deviation_pct": -34.4
+            }
+          }
+        },
+        "last_3m": {
+          "from": "2026-07",
+          "to": "2026-09",
+          "plan": 39721.78,
+          "fact": 35376.31,
+          "expected": {
+            "deviation_abs": -4345.47,
+            "deviation_pct": -10.9,
+            "key_segment_contribution_pct": 87.7,
+            "key_segment_deviation_pct": -34.2,
+            "s1_effect_abs": 3811.62
+          },
+          "drivers": {
+            "Оборот по картам": {
+              "deviation_pct": -12.0,
+              "key_segment_deviation_pct": -40.6
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "A4",
+      "title": "Рост оттока клиентов в сегменте «Зарплатные»",
+      "goal": "Привлечение и удержание клиентов",
+      "primary_kpi": "Отток клиентов",
+      "key_segment": "Зарплатные",
+      "cause_label": "Рост оттока в сегменте «Зарплатные» с падением числа активных клиентов и остатков",
+      "hidden_story": "С февраля 2026 несколько крупных работодателей перевели зарплатные проекты в другой банк: отток в сегменте вырос, число активных клиентов и остатки снижаются, фондирование дорожает.",
+      "driver_kpis_any": [
+        "Активные клиенты",
+        "Остатки на счетах и вкладах физлиц"
+      ],
+      "period_start": "2026-02",
+      "owner": "Директор по клиентскому опыту",
+      "effects": [
+        {
+          "kpi": "Отток клиентов",
+          "segment": "Зарплатные",
+          "start": "2026-02",
+          "amplitude": 1.2,
+          "shape": "ramp",
+          "ramp_months": 2
+        },
+        {
+          "kpi": "Активные клиенты",
+          "segment": "Зарплатные",
+          "start": "2026-02",
+          "amplitude": -0.012,
+          "shape": "linear",
+          "ramp_months": 1
+        },
+        {
+          "kpi": "Остатки на счетах и вкладах физлиц",
+          "segment": "Зарплатные",
+          "start": "2026-02",
+          "amplitude": -0.02,
+          "shape": "linear",
+          "ramp_months": 1
+        },
+        {
+          "kpi": "Стоимость фондирования",
+          "segment": "Зарплатные",
+          "start": "2026-02",
+          "amplitude": 0.02,
+          "shape": "linear",
+          "ramp_months": 1
+        }
+      ],
+      "checkpoints": {
+        "full": {
+          "from": "2026-02",
+          "to": "2026-09",
+          "plan": 1.13,
+          "fact": 1.28,
+          "expected": {
+            "deviation_abs": 0.15,
+            "deviation_pct": 13.5,
+            "key_segment_contribution_pct": 99.2,
+            "key_segment_deviation_pct": 109.6,
+            "s1_effect_abs": 0.15
+          },
+          "drivers": {
+            "Активные клиенты": {
+              "deviation_pct": -3.7,
+              "key_segment_deviation_pct": -10.4
+            },
+            "Остатки на счетах и вкладах физлиц": {
+              "deviation_pct": -5.0,
+              "key_segment_deviation_pct": -16.1
+            }
+          }
+        },
+        "last_6m": {
+          "from": "2026-04",
+          "to": "2026-09",
+          "plan": 1.13,
+          "fact": 1.29,
+          "expected": {
+            "deviation_abs": 0.16,
+            "deviation_pct": 14.5,
+            "key_segment_contribution_pct": 100.8,
+            "key_segment_deviation_pct": 119.3,
+            "s1_effect_abs": 0.16
+          },
+          "drivers": {
+            "Активные клиенты": {
+              "deviation_pct": -3.7,
+              "key_segment_deviation_pct": -10.4
+            },
+            "Остатки на счетах и вкладах физлиц": {
+              "deviation_pct": -5.0,
+              "key_segment_deviation_pct": -16.1
+            }
+          }
+        },
+        "last_3m": {
+          "from": "2026-07",
+          "to": "2026-09",
+          "plan": 1.13,
+          "fact": 1.31,
+          "expected": {
+            "deviation_abs": 0.18,
+            "deviation_pct": 16.1,
+            "key_segment_contribution_pct": 93.0,
+            "key_segment_deviation_pct": 122.2,
+            "s1_effect_abs": 0.17
+          },
+          "drivers": {
+            "Активные клиенты": {
+              "deviation_pct": -3.7,
+              "key_segment_deviation_pct": -10.4
+            },
+            "Остатки на счетах и вкладах физлиц": {
+              "deviation_pct": -5.0,
+              "key_segment_deviation_pct": -16.1
+            }
+          }
+        }
+      }
+    }
+  ],
+  "controls": [
+    {
+      "id": "C1",
+      "kpi": "Cost/Income",
+      "goal": "Рост прибыли и капитала",
+      "checkpoints": {
+        "last_6m": {
+          "from": "2026-04",
+          "to": "2026-09",
+          "expected": {
+            "deviation_pct": 0.6,
+            "deviation_abs": 0.27
+          }
+        }
+      }
+    },
+    {
+      "id": "C2",
+      "kpi": "Доля цифровых продаж",
+      "goal": "Цифровизация продаж и обслуживания",
+      "checkpoints": {
+        "last_6m": {
+          "from": "2026-04",
+          "to": "2026-09",
+          "expected": {
+            "deviation_pct": -1.4,
+            "deviation_abs": -1.02
+          }
+        }
+      }
+    },
+    {
+      "id": "C3",
+      "kpi": "Чистая процентная маржа",
+      "goal": "Рост чистого процентного дохода",
+      "checkpoints": {
+        "last_6m": {
+          "from": "2026-04",
+          "to": "2026-09",
+          "expected": {
+            "deviation_pct": -1.2,
+            "deviation_abs": -0.07
+          }
+        }
+      }
+    },
+    {
+      "id": "C4",
+      "kpi": "Чистый процентный доход",
+      "goal": "Рост чистого процентного дохода",
+      "checkpoints": {
+        "last_6m": {
+          "from": "2026-04",
+          "to": "2026-09",
+          "expected": {
+            "deviation_pct": 0.1,
+            "deviation_abs": 224.18
+          }
+        }
+      }
+    }
+  ]
+}
