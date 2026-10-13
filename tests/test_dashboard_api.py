@@ -3,6 +3,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import time
 
 import pytest
@@ -307,6 +308,41 @@ def test_pilot_summary_counts_dashboards_built_without_the_model(store):
     s = summarize(store.path)
     assert s["dashboards"] == 1 and s["dashboards_with_model_error"] == 1 and s["total"] == 0
     assert "с ошибкой или планом по умолчанию: 1" in format_summary(s)
+
+
+# ======================================================================================================================
+# Страница
+# ======================================================================================================================
+
+
+def test_index_has_the_dashboard_interface_and_stays_offline(client):
+    html = client.get("/").text
+    for fragment in ("Построить дашборд", "Открыть дашборд", 'id="dash"', "Как построен дашборд", "Рекомендаций GigaChat нет",
+                     "Спросить у аналитика", "Что сделать дальше", "/api/dashboard", "п.п.", 'id="dash-btn"', 'id="dc-build"'):
+        assert fragment in html, fragment
+    # графики рисует сама страница: ни библиотек, ни внешних файлов, ни зависимости от системной темы
+    assert "<script src" not in html and '<link rel="stylesheet"' not in html and "@import" not in html
+    assert "https://" not in html and "http://" not in html.replace("http://www.w3.org/2000/svg", "")
+    assert "prefers-color-scheme" not in html
+    # цвета рядов заданы для обеих тем: тёмной по умолчанию и светлой
+    assert html.count("--s1:") == 2 and html.count("--s8:") == 2
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="для проверки синтаксиса скрипта страницы нужен node")
+def test_the_page_script_parses(client, tmp_path):
+    html = client.get("/").text
+    scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+    assert len(scripts) == 1
+    path = tmp_path / "page.js"
+    path.write_text(scripts[0], "utf-8")
+    done = subprocess.run(["node", "--check", str(path)], capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+
+
+def test_the_privacy_note_names_what_goes_to_the_model(client):
+    html = client.get("/").text
+    assert "сводка отчёта (названия показателей и разрезов, итоги, ряды по периодам, вклады значений)" in html
+    assert "а не строки таблицы" in html
 
 
 # ======================================================================================================================

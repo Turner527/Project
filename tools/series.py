@@ -136,8 +136,16 @@ def series(t: Table, m: Metric, *, where=(), by: str | None = None, window: Wind
 
 
 def sparkline(t: Table, m: Metric, *, where=(), points: int = 12, window: Window | None = None) -> dict:
-    """Короткий ряд для плитки KPI: последние points корзин."""
+    """Короткий ряд для плитки KPI: последние points корзин. Неполные корзины по краям (например, последняя неделя с
+    данными за три дня из семи) не показываются: недосчёт сумм выглядел бы как падение, которого не было."""
     s = series(t, m, where=where, window=window)
     if not s["series"]:
         return {"labels": [], "values": []}
-    return {"labels": s["labels"][-points:], "values": s["series"][0]["values"][-points:], "bucket": s["bucket"]}
+    labels, values, partial = s["labels"], s["series"][0]["values"], s["partial"]
+    lo, hi = 0, len(values)
+    while hi - lo > 2 and partial[hi - 1]:
+        hi -= 1
+    while hi - lo > 2 and partial[lo]:
+        lo += 1
+    lo = max(lo, hi - points)
+    return {"labels": labels[lo:hi], "values": values[lo:hi], "bucket": s["bucket"]}

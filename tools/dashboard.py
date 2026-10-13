@@ -11,6 +11,7 @@
 прошлых периодов (значения без сравнения и структура), плоская таблица или стратегическая витрина.
 """
 import json
+import re
 import time
 from collections import Counter
 
@@ -167,8 +168,16 @@ def build_digest(t: Table, *, max_metrics: int = MAX_DIGEST_METRICS, points: int
     if t.links:
         digest["links"] = [{"cause": x["cause"], "effect": x["effect"], "direction": x["direction"]} for x in t.links[:30]]
     if t.warnings:
-        digest["data_quality"] = [w[:240] for w in t.warnings[:5]]
+        digest["data_quality"] = [_without_cell_samples(w)[:240] for w in t.warnings[:5]]
     return _fit(digest, points)
+
+
+_CELL_SAMPLE = re.compile(r"\s*\(например «[^»]*»\)")
+
+
+def _without_cell_samples(warning: str) -> str:
+    """Предупреждение о качестве данных без образца ячейки из файла: в модель уходят счётчики и номера строк, но не содержимое."""
+    return _CELL_SAMPLE.sub("", warning)
 
 
 def _fit(digest: dict, points: int) -> dict:
@@ -216,6 +225,17 @@ def _diverse(items: list[dict], per_cluster: int = 2) -> list[dict]:
         else:
             tail.append(m)
     return head + tail
+
+
+def _shared_source(problems: list[dict], limit: int = 4):
+    """Самое частое главное значение среди проблемных показателей: ((измерение, значение), показатели) — если их хотя бы два."""
+    groups: dict[tuple, list[dict]] = {}
+    for m in problems:
+        c = _cluster(m)
+        if c:
+            groups.setdefault(c, []).append(m)
+    best = max(groups.items(), key=lambda kv: len(kv[1]), default=None)
+    return (best[0], best[1][:limit]) if best and len(best[1]) >= 2 else None
 
 
 def _first_dim(m: dict) -> str | None:
@@ -281,6 +301,14 @@ def fallback_plan(digest: dict) -> dict:
             text += f" Ухудшение держится {m['unfavorable_periods']} {m['interval']} подряд, с {m['unfavorable_since']}."
         insights.append({"title": f"{m['name']}: {m['assessment']}", "text": text, "severity": "problem",
                          "widgets": ids.get(m["name"], [])})
+    shared = _shared_source(problems)
+    if shared:  # несколько ухудшений с одним главным значением — это один вывод, а не три повтора: ставим его первым
+        (dim, value), members = shared
+        names = ", ".join(f"«{m['name']}»" for m in members)
+        shares = "; ".join(f"«{m['name']}» — {fmt.num(m['dimensions'][0]['top'][0]['contribution_pct'])}% изменения" for m in members)
+        insights.insert(0, {"title": f"{fmt.dim_word(dim).capitalize()} «{value}» — общий источник ухудшения",
+                            "text": f"Основной вклад в ухудшение показателей {names} даёт {fmt.dim_word(dim)} «{value}»: {shares}.",
+                            "severity": "problem", "widgets": [w for m in members for w in ids.get(m["name"], [])[:1]]})
     for m in hidden[:2]:
         parts = "; ".join(f"{fmt.dim_word(x['dimension'])} «{x['value']}»: {fmt.num(x['change_pct'], True)}% к базе "
                           f"(влияние на итог {fmt.num(x['effect_on_total_pct'], True)}%)" for x in m["local_deviations"])
@@ -331,7 +359,7 @@ def fallback_plan(digest: dict) -> dict:
                 or (m.get("local_deviations") or [{}])[0].get("value"))
         if lead and dim:
             questions.append(f"Что произойдёт, если вернуть {fmt.dim_word(dim)} «{lead}» к базе сравнения?")
-            questions.append(f"Какие риски, если ничего не менять по {fmt.dim_word(dim)} «{lead}»?")
+            questions.append(f"Какие риски, если ничего не менять и {fmt.dim_word(dim)} «{lead}» останется на нынешнем уровне?")
     questions.append("Что делать в первую очередь по итогам дашборда и в каком порядке?")
     questions.append("Каких данных не хватает, чтобы уверенно объяснить причины?")
 

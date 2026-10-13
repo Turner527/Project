@@ -111,7 +111,8 @@ class ScriptedLLM:
         elif metric_hits:
             metric = metric_hits[0]["metric"]
         if metric is None and context:  # вопрос про «этот канал» без названия показателя — берём главную проблему дашборда
-            metric = next((i["title"].split(":")[0] for i in context["insights"] if i["severity"] in ("проблема", "риск")), None)
+            metric = next((i["title"].split(":")[0] for i in context["insights"]
+                           if i["severity"] in ("проблема", "риск") and ": " in i["title"]), None)  # «Показатель: оценка»
         if metric is None:
             return None
         args = {"metric": metric, **_period_args(question)}

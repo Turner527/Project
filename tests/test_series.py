@@ -173,10 +173,25 @@ def test_report_without_dates_has_no_series():
                                                   "plan": None, "others": 0}
 
 
-def test_sparkline_returns_the_last_points():
-    rows, df = daily(100)
+def test_sparkline_returns_the_last_points_without_partial_edges():
+    rows, df = daily(100)  # 1 января (четверг) – 10 апреля (пятница): первая и последняя недели неполные
     t = table(rows)
-    sp = S.sparkline(t, t.metric("Выручка"), points=5)
     full = S.series(t, t.metric("Выручка"))
-    assert sp["values"] == full["series"][0]["values"][-5:] and sp["labels"] == full["labels"][-5:] and sp["bucket"] == "week"
+    assert full["partial"][0] and full["partial"][-1] and not any(full["partial"][1:-1])
+    sp = S.sparkline(t, t.metric("Выручка"), points=5)
+    assert sp["values"] == full["series"][0]["values"][-6:-1] and sp["labels"] == full["labels"][-6:-1] and sp["bucket"] == "week"
+    whole = S.sparkline(t, t.metric("Выручка"), points=50)
+    assert whole["values"] == full["series"][0]["values"][1:-1]  # не показаны ни первая, ни последняя неполная неделя
     assert S.sparkline(t, t.metric("Выручка"), where=[("Канал", "нет такого")]) == {"labels": [], "values": []}
+
+
+def test_sparkline_hides_partial_weeks_only_while_enough_points_remain(monkeypatch):
+    rows = [(d.strftime("%Y-%m-%d"), "А", 10, 1, 1.0) for d in pd.date_range("2026-01-07", "2026-02-18")]  # среда … среда: 7 недель
+    t = table(rows)
+    sp = S.sparkline(t, t.metric("Выручка"))
+    assert sp["bucket"] == "week" and sp["labels"] == ["2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09"]
+    assert S.sparkline(t, t.metric("Конверсия"))["labels"][0] == "2026-01-05"  # у отношений неполных недель нет: ничего не обрезается
+    fake = {"labels": ["a", "b", "c"], "dates": [], "partial": [True, True, True], "series": [{"name": "x", "values": [1.0, 2.0, 3.0]}],
+            "plan": None, "others": 0, "bucket": "week"}
+    monkeypatch.setattr(S, "series", lambda *args, **kwargs: fake)
+    assert S.sparkline(None, None)["values"] == [1.0, 2.0]  # меньше двух точек линия не рисуется, поэтому два остаются
