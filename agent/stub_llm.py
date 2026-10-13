@@ -76,6 +76,7 @@ class ScriptedLLM:
         if DIGEST_OPEN in question:  # запрос плана дашборда: сводка отчёта между метками
             return self._dashboard(messages, question)
         results = [(m["name"], json.loads(m["content"])) for m in messages if m["role"] == "function"]
+        calls = [m["function_call"] for m in messages if m["role"] == "assistant" and m.get("function_call")]
         context = _dashboard_context(messages)
         strategic = context is not None and _is_strategic(question)
         if function_call == "none":
@@ -84,7 +85,7 @@ class ScriptedLLM:
             return LLMResponse(content=content, usage=self._usage(messages, content), finish_reason="stop")
         if strategic:  # стратегический вопрос после дашборда отвечается по его выводам, инструменты не нужны
             return LLMResponse(content="Данных достаточно.", usage=self._usage(messages, ""), finish_reason="stop")
-        call = self._next_call(question, results, context)
+        call = self._next_call(question, results, context, calls)
         usage = self._usage(messages, json.dumps(call.__dict__, ensure_ascii=False) if call else "")
         if call is None:
             return LLMResponse(content="Данных достаточно.", usage=usage, finish_reason="stop")
@@ -96,10 +97,16 @@ class ScriptedLLM:
         content = json.dumps(dashboard.fallback_plan(json.loads(raw)), ensure_ascii=False)
         return LLMResponse(content=content, usage=self._usage(messages, content), finish_reason="stop")
 
-    def _next_call(self, question: str, results: list, context: dict | None = None) -> FunctionCall | None:
+    def _next_call(self, question: str, results: list, context: dict | None = None, calls: list | None = None) -> FunctionCall | None:
         if not results:
             return FunctionCall("find_metrics", {"query": question})
         name, data = results[-1]
+        if name == "diagnose_change" and "Не с чем сравнивать" in str(data.get("error", "")) \
+                and not any(n == "get_structure" for n, _ in results):
+            # у отчёта нет базы сравнения: как велит промпт, вместо изменения берём значение и состав показателя
+            last = next((c["arguments"] for c in reversed(calls or []) if c["name"] == "diagnose_change"), {})
+            keep = ("metric", "where_dimension", "where_value", "period_from", "period_to", "last_months", "last_days")
+            return FunctionCall("get_structure", {k: v for k, v in last.items() if k in keep})
         if name != "find_metrics":
             return None
         metric_hits, goal_hits = data.get("metric_matches", []), data.get("goal_matches", [])
@@ -155,6 +162,9 @@ class ScriptedLLM:
     def _memo(self, results: list) -> dict:
         ids = [d["call_id"] for _, d in results if "call_id" in d]
         diag = next((d for n, d in reversed(results) if n == "diagnose_change" and "error" not in d), None)
+        struct = next((d for n, d in reversed(results) if n == "get_structure" and "error" not in d), None)
+        if diag is None and struct is not None:
+            return self._memo_from_structure(struct, [struct["call_id"]])  # числа — из этого вызова, не из неудавшегося diagnose_change
         if diag is None:
             return {
                 "diagnosis": {
@@ -167,6 +177,26 @@ class ScriptedLLM:
                 "used_tool_calls": ids,
             }
         return self._memo_from_diagnosis(diag, ids)
+
+    @staticmethod
+    def _memo_from_structure(s: dict, ids: list[str]) -> dict:
+        """Ответ там, где сравнивать не с чем: значение показателя и из чего оно состоит, без слов об изменении и причинах."""
+        u = _u(s["unit"])
+        summary = f"{s['metric']}: {_fmt(s['value'])}{u}" + (f" за {s['period']['from']} – {s['period']['to']}" if s["period"].get("from") else "") + "."
+        part = s["structure"][0] if s["structure"] else None
+        top = part["values"][0] if part and part["values"] else None
+        if top:
+            summary += f" Больше всего даёт {_dim(part['dimension'])} «{top['value']}»: {_fmt(top['share_pct'])}%"
+            summary += f" ({_fmt(top['fact'])}{u})." if top["fact"] is not None else "."
+            if len(part["values"]) > 1 and part["values"][1]["fact"] is not None:
+                second = part["values"][1]
+                summary += f" Следом — {_dim(part['dimension'])} «{second['value']}»: {_fmt(second['share_pct'])}%."
+        summary += " Сравнивать не с чем: нет плана и подходящего прошлого периода, поэтому об изменении и его причинах сказать нельзя."
+        return {"diagnosis": {"summary": summary, "root_cause": "Причины изменения не определены: нет базы сравнения",
+                              "key_segments": [top["value"]] if top else []},
+                "scenarios": [],
+                "manual_checks": ["Загрузить отчёт с планом или с прошлыми периодами, чтобы сравнивать значения и искать причины изменений."],
+                "used_tool_calls": ids}
 
     @staticmethod
     def _driver(d: dict, dim_value: str | None):

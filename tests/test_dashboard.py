@@ -185,6 +185,15 @@ def test_digest_without_dates_or_baseline_describes_structure(tmp_path):
     assert d["highlights"] == {"significant_deterioration": [], "significant_improvement": [], "hidden_problems_inside_flat_total": []}
 
 
+def test_default_questions_of_a_report_without_a_baseline_are_not_about_changes():
+    metrics = [{"name": "Выручка", "kind": "sum", "column": "Сумма"}, {"name": "Клиенты", "kind": "sum", "column": "Объём"}]
+    t = table_from([("А", 10, 100), ("Б", 30, 100), ("В", 60, 300)], ["Канал", "Сумма", "Объём"], dict(dimensions=["Канал"], metrics=metrics))
+    questions = D.fallback_plan(D.build_digest(t))["questions"]
+    assert not any("Почему изменился" in q or "базе сравнения" in q for q in questions)  # у отчёта нет базы: объяснять нечего
+    assert questions[0] == "Какие значения «Канал» дают основную долю показателя «Выручка»?" and len(questions) == 4
+    assert "плановые значения" in questions[2] and "сравнивать периоды" in questions[3]
+
+
 def test_digest_with_a_plan_but_no_dates_compares_with_the_plan():
     m = [{"name": "Выручка", "kind": "sum", "column": "Сумма", "plan_column": "План"}]
     t = table_from([("А", 10, 12), ("Б", 30, 25), ("В", 60, 70)], ["Канал", "Сумма", "План"], dict(dimensions=["Канал"], metrics=m))

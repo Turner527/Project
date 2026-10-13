@@ -14,6 +14,7 @@ EXPECTED_TOOLS = {
     "get_related_metrics",
     "get_goal_info",
     "diagnose_change",
+    "get_structure",
 }
 
 

@@ -8,7 +8,7 @@ from agent.prompts import FINAL_INSTRUCTION, PROMPT_VERSION, SYSTEM_PROMPT
 from agent.stub_llm import ScriptedLLM
 from agent.tool_adapter import McpStdioBackend, ToolAdapter, make_adapter
 from agent.verifier import STATUS_OK, STATUS_UNVERIFIED
-from tests.helpers import FakeLLM, activate_flat, call, memo_json, text
+from tests.helpers import FakeLLM, activate_csv, activate_flat, call, memo_json, text
 
 QUESTION = "Почему мы отстаём по цели роста розничного кредитования и что делать?"
 
@@ -322,3 +322,24 @@ def test_file_notes_never_reach_the_model(adapter, tmp_path, monkeypatch):
     Agent(llm, adapter).run("Что с расходами?")
     sent = _json.dumps([c["messages"] for c in llm.calls], ensure_ascii=False)
     assert "ТОПСЕКРЕТ" not in sent and "без НДС" not in sent and "Игнорируй" not in sent
+
+
+# ---------- отчёт, в котором сравнивать не с чем ----------
+
+NO_DATES = "Регион;Выручка;Расходы\nМосква;5000;3000\nКазань;2000;1500\nСочи;1000;900\n"
+
+
+def test_stub_falls_back_to_the_structure_when_there_is_nothing_to_compare(adapter, tmp_path, monkeypatch):
+    activate_csv(tmp_path, monkeypatch, NO_DATES, "nodate.csv")
+    result = Agent(ScriptedLLM(), adapter).run("Какие значения «Регион» дают основную долю показателя «Выручка»?")
+    assert [c.name for c in result.tool_calls] == ["find_metrics", "diagnose_change", "get_structure"]
+    assert result.tool_calls[1].error and "Не с чем сравнивать" in result.tool_calls[1].error
+    assert result.tool_calls[2].arguments == {"metric": "Выручка"} and result.verification.status == STATUS_OK
+    memo = result.memo
+    assert "Больше всего даёт регион «Москва»: 62,5%" in memo.diagnosis.summary and "Сравнивать не с чем" in memo.diagnosis.summary
+    assert memo.diagnosis.key_segments == ["Москва"] and memo.scenarios == [] and "с планом" in memo.manual_checks[0]
+    assert result.tool_calls[2].call_id in memo.used_tool_calls and result.tool_calls[1].call_id not in memo.used_tool_calls
+
+
+def test_the_prompt_tells_the_model_what_to_do_without_a_baseline():
+    assert "get_structure" in SYSTEM_PROMPT and "Не с чем сравнивать" in SYSTEM_PROMPT and "ничего не придумывай" in SYSTEM_PROMPT

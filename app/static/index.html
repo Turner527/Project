@@ -336,9 +336,9 @@
   .d-tile svg.spark { display: block; margin-top: 8px; width: 100%; max-width: 140px; height: auto; overflow: visible; }
 
   .d-body { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(300px, 1fr); gap: 0 18px; align-items: start; }
-  .d-charts { grid-column: 1; grid-row: 1 / span 2; min-width: 0; }
-  .d-insights { grid-column: 2; grid-row: 1; min-width: 0; }
-  .d-more { grid-column: 2; grid-row: 2; min-width: 0; }
+  .d-charts { grid-column: 1; grid-row: 1; min-width: 0; }
+  .d-side { grid-column: 2; grid-row: 1; min-width: 0; }
+  .d-insights, .d-more { min-width: 0; }
   .d-card { padding: 20px 22px 18px; border-radius: 24px; background: var(--panel); border: 1px solid var(--line); margin-bottom: 18px; scroll-margin-top: 110px; min-width: 0; }
   .d-card h4 { margin: 0 0 4px; font-size: 18px; line-height: 1.3; font-weight: 600; overflow-wrap: anywhere; }
   .d-note { margin: 0 0 10px; color: var(--muted); font-size: 14px; }
@@ -424,6 +424,7 @@
   }
   @media (max-width: 1060px) {
     .d-body { grid-template-columns: minmax(0, 1fr); }
+    .d-side { display: contents; }  /* инсайты и «дальше» становятся отдельными блоками сетки и переставляются */
     .d-charts, .d-insights, .d-more { grid-column: 1; grid-row: auto; }
     .d-insights { order: 1; } .d-charts { order: 2; } .d-more { order: 3; }
   }
@@ -803,7 +804,10 @@ function statusBadge(data) {
 function keyTiles(data) {
   const live = (name) => [...data.tool_calls].reverse().find((c) => c.tool === name && !c.error);
   const call = live("diagnose_change") || live("get_change");
-  if (!call) return null;
+  if (!call) {
+    const st = live("get_structure"); // отчёт без базы сравнения: вместо изменения — значение и главная доля
+    return st ? structureTiles(st) : null;
+  }
   const d = call.result, dev = d.deviation || d;
   if (dev.fact == null) return null;
   const tone = dev.significant ? (dev.unfavorable ? "neg" : "pos") : "";
@@ -830,6 +834,18 @@ function keyTiles(data) {
     el("div", { class: "val sm neg" }, local.value), el("div", { class: "cap" }, `${fmtPct(local.change_pct)} к базе при ровном итоге`)));
   if (d.unfavorable_since) tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, "Ухудшение держится"),
     el("div", { class: "val" }, `${d.unfavorable_periods_in_row} ${d.interval}`), el("div", { class: "cap" }, `с ${d.unfavorable_since}`)));
+  return [el("div", { class: "kpis" }, tiles), el("div", { class: "kpis-src" }, `Цифры из расчёта · ${call.call_id}`)];
+}
+
+function structureTiles(call) {
+  const d = call.result, part = d.structure && d.structure[0], top = part && part.values[0];
+  const unit = d.unit ? ` ${d.unit}` : "";
+  const tiles = [el("div", { class: "tile" }, el("div", { class: "lbl" }, "Значение показателя"),
+    el("div", { class: "val" }, `${fmt(d.value)}${unit}`), el("div", { class: "cap" }, `${d.metric} · ${d.period.from ? d.period.from + " – " + d.period.to : "весь файл"}`))];
+  if (top) tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, `Главная доля · ${part.dimension}`),
+    el("div", { class: "val" + (top.value.length > 12 ? " sm" : "") }, top.value), el("div", { class: "cap" }, `${fmt(top.share_pct)}% показателя`)));
+  tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, "С чем сравнивали"), el("div", { class: "val sm" }, "Не с чем"),
+    el("div", { class: "cap" }, "нет плана и прошлых периодов")));
   return [el("div", { class: "kpis" }, tiles), el("div", { class: "kpis-src" }, `Цифры из расчёта · ${call.call_id}`)];
 }
 
@@ -1916,7 +1932,7 @@ function dashboardDom(d) {
     kpis.length ? el("div", { class: "d-kpis" }, kpis.map(([w, i]) => kpiTile(w, i, d))) : null,
     el("div", { class: "d-body" },
       el("div", { class: "d-charts" }, charts.map(([w, i]) => (w.type === "trend" ? trendCard(w, i, d) : breakdownCard(w, i, d)))),
-      insightsCard(d), el("div", { class: "d-more" }, steps, questions)),
+      el("div", { class: "d-side" }, insightsCard(d), el("div", { class: "d-more" }, steps, questions))),
     howPanel(d),
     el("div", { class: "d-feedback" }, renderFeedback(d, "Дашборд был полезен?")),
   ];

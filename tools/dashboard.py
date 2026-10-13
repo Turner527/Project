@@ -353,19 +353,25 @@ def fallback_plan(digest: dict) -> dict:
     questions: list[str] = []
     asked = [m for m in dict.fromkeys(id(x) for x in leads[:2] + problems + hidden + gains + others)]
     by_any = {id(x): x for x in leads + problems + hidden + gains + others}
-    for key in asked[:2]:
-        questions.append(f"Почему изменился показатель «{by_any[key]['name']}» и где именно?")
-    lead_metric = (leads + hidden)[:1]
-    if lead_metric:
-        m = lead_metric[0]
-        dim = _first_dim(m)
-        lead = (((m.get("dimensions") or [{}])[0].get("top") or [{}])[0].get("value")
-                or (m.get("local_deviations") or [{}])[0].get("value"))
-        if lead and dim:
-            questions.append(f"Что произойдёт, если вернуть {fmt.dim_word(dim)} «{lead}» к базе сравнения?")
-            questions.append(f"Какие риски, если ничего не менять и {fmt.dim_word(dim)} «{lead}» останется на нынешнем уровне?")
-    questions.append("Что делать в первую очередь по итогам дашборда и в каком порядке?")
-    questions.append("Каких данных не хватает, чтобы уверенно объяснить причины?")
+    if any(m.get("baseline") for m in metrics):
+        for key in asked[:2]:
+            questions.append(f"Почему изменился показатель «{by_any[key]['name']}» и где именно?")
+        lead_metric = (leads + hidden)[:1]
+        if lead_metric:
+            m = lead_metric[0]
+            dim = _first_dim(m)
+            lead = (((m.get("dimensions") or [{}])[0].get("top") or [{}])[0].get("value")
+                    or (m.get("local_deviations") or [{}])[0].get("value"))
+            if lead and dim:
+                questions.append(f"Что произойдёт, если вернуть {fmt.dim_word(dim)} «{lead}» к базе сравнения?")
+                questions.append(f"Какие риски, если ничего не менять и {fmt.dim_word(dim)} «{lead}» останется на нынешнем уровне?")
+        questions.append("Что делать в первую очередь по итогам дашборда и в каком порядке?")
+        questions.append("Каких данных не хватает, чтобы уверенно объяснить причины?")
+    else:  # сравнивать не с чем: объяснять нечего, зато можно спросить про структуру и про то, чего не хватает
+        for m in [x for x in metrics if x.get("structure")][:2]:
+            questions.append(f"Какие значения «{m['structure'][0]['dimension']}» дают основную долю показателя «{m['name']}»?")
+        questions.append("Какие показатели стоит взять под регулярное наблюдение и какие плановые значения для них задать?")
+        questions.append("Каких данных не хватает, чтобы сравнивать периоды и находить причины изменений?")
 
     head = f"Отчёт «{rep['source']}»: {fmt.num(rep['rows'])} строк, {rep['metrics_count']} показателей"
     if rep.get("period"):

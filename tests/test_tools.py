@@ -578,3 +578,82 @@ def test_specificity_comes_before_verbatim_matching(marketing):
     """«Лиды» дословно есть в «конверсия из кликов в лиды», но это не повод предпочесть его «Конверсии в лиды»."""
     hits = core.find_metrics("Почему упала конверсия из кликов в лиды?")["metric_matches"]
     assert hits[0]["metric"] == "Конверсия в лиды"
+
+
+# ======================================================================================================================
+# get_structure: значение и состав показателя у любого отчёта, в том числе там, где сравнивать не с чем
+# ======================================================================================================================
+
+
+def test_structure_of_a_sum_matches_pandas(marketing):
+    res = core.get_structure("Расходы", by="Канал")
+    fact = days(marketing, "2026-09-01", "2026-09-30")
+    total = fact["Расходы, руб"].sum()
+    assert res["tool"] == "get_structure" and res["call_id"].startswith("c_") and res["value"] == total and res["unit"] == "руб"
+    assert res["period"] == {"from": "2026-09-01", "to": "2026-09-30", "periods": 30} and len(res["structure"]) == 1
+    part = res["structure"][0]
+    assert part["dimension"] == "Канал" and part["values_count"] == 4
+    expected = fact.groupby("Канал")["Расходы, руб"].sum().sort_values(ascending=False)
+    assert [r["value"] for r in part["values"]] == list(expected.index)
+    for row in part["values"]:
+        assert row["fact"] == expected[row["value"]] and row["share_pct"] == pytest.approx(100 * expected[row["value"]] / total, abs=0.06)
+
+
+def test_structure_of_a_ratio_uses_summed_parts_and_ranks_by_volume(marketing):
+    part = core.get_structure("Конверсия в лиды", by="Канал")["structure"][0]
+    fact = days(marketing, "2026-09-01", "2026-09-30").groupby("Канал")[["Лиды", "Клики"]].sum()
+    for row in part["values"]:
+        assert row["fact"] == pytest.approx(100 * fact.loc[row["value"], "Лиды"] / fact.loc[row["value"], "Клики"], abs=0.006)
+        assert row["share_pct"] == pytest.approx(100 * fact.loc[row["value"], "Клики"] / fact["Клики"].sum(), abs=0.06)  # доля в объёме
+    assert [r["value"] for r in part["values"]] == list(fact["Клики"].sort_values(ascending=False).index)
+
+
+def test_structure_without_a_dimension_lists_the_most_useful_ones_and_respects_filters(marketing):
+    res = core.get_structure("Расходы")
+    assert [p["dimension"] for p in res["structure"]] == ["Канал", "Кампания"]
+    scoped = core.get_structure("Расходы", where_dimension="Канал", where_value="Поиск")
+    assert scoped["filter"] == {"Канал": "Поиск"} and [p["dimension"] for p in scoped["structure"]] == ["Кампания"]  # занятое фильтром не раскладываем
+    fact = days(marketing, "2026-09-01", "2026-09-30")
+    assert scoped["value"] == fact[fact["Канал"] == "Поиск"]["Расходы, руб"].sum()
+    bad = core.get_structure("Расходы", by="Нет такого")
+    assert "error" in bad and bad["dimensions"] == ["Канал", "Кампания"]
+    assert "error" in core.get_structure("Расходы", by="Канал", where_dimension="Канал", where_value="Поиск")
+
+
+def test_structure_works_on_the_strategic_demo_and_for_balances():
+    res = core.get_structure("Выдачи розничных кредитов")
+    goals, facts, links = generate.build_frames()
+    window = facts[(facts["KPI"] == "Выдачи розничных кредитов") & (facts["месяц"] >= pd.Timestamp("2026-04-01"))]
+    assert res["value"] == pytest.approx(window["факт"].sum(), abs=0.006) and res["period"]["from"] == "2026-04"
+    expected = window.groupby("сегмент")["факт"].sum()
+    for row in res["structure"][0]["values"]:
+        assert row["fact"] == pytest.approx(expected[row["value"]], abs=0.006)
+    stock = core.get_structure("Розничный кредитный портфель")  # остаток: берётся последний месяц окна, а не сумма
+    last = facts[(facts["KPI"] == "Розничный кредитный портфель") & (facts["месяц"] == facts["месяц"].max())]
+    assert stock["value"] == pytest.approx(last["факт"].sum(), abs=0.006)
+
+
+NO_DATES = "Регион;Выручка;Расходы\nМосква;5000;3000\nКазань;2000;1500\nСочи;1000;900\n"
+
+
+def test_structure_of_a_report_without_dates_or_plan(tmp_path, monkeypatch):
+    from tests.helpers import activate_csv
+
+    activate_csv(tmp_path, monkeypatch, NO_DATES, "nodate.csv")
+    assert "Не с чем сравнивать" in core.diagnose_change("Выручка")["error"]  # изменение объяснить нельзя
+    res = core.get_structure("Выручка")
+    assert res["value"] == 8000 and res["period"] == {"note": "в данных нет дат"}
+    values = res["structure"][0]["values"]
+    assert [(v["value"], v["fact"], v["share_pct"]) for v in values] == [("Москва", 5000.0, 62.5), ("Казань", 2000.0, 25.0), ("Сочи", 1000.0, 12.5)]
+    json.dumps(res, allow_nan=False)
+
+
+def test_structure_of_a_report_without_dimensions_says_so(monkeypatch):
+    from data.model import Metric, Spec, build_table
+    from tools import datastore
+
+    frame = pd.DataFrame([(f"2026-0{m}-01", 10 * m) for m in range(1, 7)], columns=["Месяц", "Сумма"])
+    table = build_table(frame, Spec(date="Месяц", metrics=[Metric(name="Выручка", kind="sum", column="Сумма")]), "t")
+    monkeypatch.setattr(datastore, "get_table", lambda: table)
+    res = core.get_structure("Выручка")
+    assert res["structure"] == [] and "нет измерений" in res["structure_note"] and res["value"] > 0

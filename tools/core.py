@@ -15,6 +15,7 @@ from tools.text import scores
 
 MIN_MATCH_SCORE = 0.5
 MAX_VALUES = 8  # значений измерения в ответе break_down
+MAX_STRUCTURE_DIMENSIONS = 3  # измерений в ответе get_structure, если не названо конкретное
 BETTER_WORD = {"up": "больше", "down": "меньше", "none": "нейтрально"}
 
 MetricArg = Annotated[str, Field(description="Название показателя (из describe_dataset или find_metrics)")]
@@ -286,7 +287,38 @@ def diagnose_change(metric: MetricArg, period_from: FromArg = None, period_to: T
     return out
 
 
+@_tool
+def get_structure(metric: MetricArg, by: ByArg = None, period_from: FromArg = None, period_to: ToArg = None,
+                  last_months: LastMonthsArg = None, last_days: LastDaysArg = None, where_dimension: WhereDimArg = None,
+                  where_value: WhereValueArg = None) -> dict:
+    """Значение показателя за период и из чего оно состоит: значение и доля каждого значения измерения. Работает у любого
+    отчёта, в том числе без дат и без плана, где сравнивать не с чем: для вопросов «какое значение», «из чего состоит»,
+    «какой канал даёт основную долю». Вопросы про изменение и причины решает diagnose_change."""
+    t = datastore.get_table()
+    m = E.find_metric(t, metric)
+    win, note = E.resolve_window(t, period_from, period_to, last_months, last_days)
+    where = E.resolve_where(t, where_dimension, where_value)
+    out = {"metric": m.name, "unit": m.unit, "better": BETTER_WORD[m.better], "definition": m.definition(),
+           "period": _period(t, win), "value": r(E.value_only(t, m, win, where))}
+    if where:
+        out["filter"] = {d: v for d, v in where}
+    if note:
+        out["note"] = note
+    free = [d for d in t.dims if all(d != w for w, _ in where)]
+    if by:
+        dims = {d.casefold(): d for d in free}
+        if by.strip().casefold() not in dims:
+            raise ToolError(f"Измерения «{by}» нет или оно занято фильтром. Доступны: {', '.join(free) or 'нет измерений'}.",
+                            dimensions=free)
+        free = [dims[by.strip().casefold()]]
+    out["structure"] = [{"dimension": d, "values_count": len(t.dim_values[d]), "values": E.structure(t, m, win, d, where, MAX_VALUES)}
+                        for d in free[:MAX_STRUCTURE_DIMENSIONS]]
+    if not out["structure"]:
+        out["structure_note"] = "В данных нет измерений: значение показателя назвать можно, а из чего оно состоит — нет."
+    return out
+
+
 TOOLS: dict[str, Callable[..., dict]] = {
     fn.__name__: fn for fn in (describe_dataset, find_metrics, get_change, break_down, get_related_metrics,
-                               get_goal_info, diagnose_change)
+                               get_goal_info, diagnose_change, get_structure)
 }

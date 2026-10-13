@@ -125,3 +125,19 @@ MODEL_PLAN = {
 
 def plan_json(**changes):
     return json.dumps({**MODEL_PLAN, **changes}, ensure_ascii=False)
+
+
+def activate_csv(tmp_path, monkeypatch, content: str, name: str = "report.csv"):
+    """Делает активным плоский отчёт из текста csv: роли столбцов определяет профилировщик, как при загрузке в интерфейсе."""
+    from data.profile import profile
+    from data.readers import read_file
+    from tools import datastore
+
+    data = content.encode("utf-8")
+    raw = read_file(data, name)
+    (tmp_path / "data.csv").write_bytes(data)
+    (tmp_path / "spec.json").write_text(json.dumps({"data_file": "data.csv", "filename": name, "spec": profile(raw)["spec"]},
+                                                   ensure_ascii=False), "utf-8")
+    monkeypatch.setenv("KPI_DATA_PATH", str(tmp_path / "spec.json"))
+    datastore._cache.clear()
+    return datastore.get_table()
