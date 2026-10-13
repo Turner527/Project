@@ -1091,7 +1091,8 @@ function renderReview(st) {
   const dialog = $("dialog"), top = dialog.scrollTop, p = st.profile;
   dialog.className = "dialog wide review";
   const meta = [`Файл «${p.filename}»`, p.sheets.length > 1 ? null : `лист «${p.sheet}»`, `${fmt(p.rows)} ${plural(p.rows, "строка", "строки", "строк")}`,
-    p.period ? `${p.period.from} – ${p.period.to} (${GRAIN_WORD[p.grain]})` : "дат не найдено"].filter(Boolean).join(" · ");
+    p.period ? `${p.period.from} – ${p.period.to} (${GRAIN_WORD[p.grain]})` : "дат не найдено",
+    p.rows_excluded ? `исключено фильтром: ${fmt(p.rows_excluded)} ${plural(p.rows_excluded, "строка", "строки", "строк")}` : null].filter(Boolean).join(" · ");
   const parts = [el("h3", {}, "Проверьте роли и типы столбцов"), el("p", { class: "review-meta" }, meta)];
 
   const tools = [];

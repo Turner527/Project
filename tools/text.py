@@ -49,5 +49,8 @@ def scores(query: str, docs: dict[str, str]) -> list[tuple[str, float]]:
             hit = sum(idf[s] for s in st & q)
             full_mention = st <= q
             out.append((key, 1.0 if full_mention else round(0.5 * hit / total + 0.5 * hit / q_total, 3)))
-    # при равной оценке — более конкретное (длинное) название: «Стоимость заказа» точнее, чем «Заказы»
-    return sorted(out, key=lambda kv: (-kv[1], -len(doc_stems[kv[0]]), kv[0]))
+    # при равной оценке: более конкретное (длинное) название — «Стоимость заказа» точнее, чем «Заказы»; а при равной
+    # конкретности — то, что названо в вопросе дословно («Выполнение SLA», а не «SLA выполнено» с теми же основами)
+    text = " ".join(str(query).casefold().split())
+    verbatim = {k: " ".join(str(docs[k]).casefold().split()) in text for k in doc_stems}
+    return sorted(out, key=lambda kv: (-kv[1], -len(doc_stems[kv[0]]), not verbatim[kv[0]], kv[0]))

@@ -13,7 +13,7 @@ import pandas as pd
 from data.parsing import (
     TOTAL_RE,
     detect_grain,
-    is_empty,
+    empty_mask,
     parse_date_series,
     to_number_series,
 )
@@ -231,6 +231,16 @@ class Table:
         return info
 
 
+def _total_mask(col: pd.Series) -> pd.Series:
+    """Строки вида «Итого», «Всего» в текстовом столбце."""
+    mask = pd.Series(False, index=col.index)
+    if col.dtype == object:
+        strings = col[col.map(type).eq(str)]
+        if len(strings):
+            mask.loc[strings.index] = strings.str.match(TOTAL_RE).astype(bool)
+    return mask
+
+
 def _excel_row(idx: int, header_row: int) -> int:
     return int(idx) + header_row + 1
 
@@ -254,15 +264,17 @@ def build_table(raw: pd.DataFrame, spec: Spec, source: str = "", header_row: int
     df = raw.copy()
     rows_total = len(df)
 
-    # пустые строки и строки «Итого» (иначе суммы удвоятся)
-    blank = df.map(is_empty).all(axis=1)
-    df = df[~blank]
+    # пустые строки и строки «Итого» (иначе суммы удвоятся); маски пустых ячеек считаем один раз и сужаем вместе со строками
+    empty = df.apply(empty_mask)
+    df = df[~empty.all(axis=1)]
+    empty = empty.loc[df.index]
     key_cols = ([spec.date] if spec.date else []) + spec.dimensions
     if key_cols:
-        total_rows = df[key_cols].apply(lambda col: col.map(lambda v: isinstance(v, str) and bool(TOTAL_RE.match(v)))).any(axis=1)
+        total_rows = df[key_cols].apply(_total_mask).any(axis=1)
         if total_rows.any():
             warnings.append(f"Исключено итоговых строк («Итого», «Всего»): {int(total_rows.sum())}.")
             df = df[~total_rows]
+            empty = empty.loc[df.index]
 
     dates = None
     if spec.date:
@@ -279,9 +291,10 @@ def build_table(raw: pd.DataFrame, spec: Spec, source: str = "", header_row: int
     excluded = 0
     for f in spec.filters:
         keep = {v.strip().lower() for v in f["values"]}
-        mask = df[f["column"]].map(lambda v: str(v).strip().lower() in keep)
+        mask = df[f["column"]].astype(str).str.strip().str.lower().isin(keep)
         excluded += int((~mask).sum())
         df = df[mask]
+        empty = empty.loc[df.index]
         if dates is not None:
             dates = dates[mask]
     if df.empty:
@@ -296,7 +309,7 @@ def build_table(raw: pd.DataFrame, spec: Spec, source: str = "", header_row: int
     parsed_cols: dict[str, pd.Series] = {}
     for col in dict.fromkeys(needed):
         parsed = to_number_series(df[col])
-        bad = df[parsed.isna() & ~df[col].map(is_empty)]
+        bad = df[parsed.isna() & ~empty[col]]
         if len(bad):
             share = len(bad) / len(df)
             msg = (f"Столбец «{col}»: нечисловые значения в строках {_rows_text(bad.index, header_row)} "
@@ -320,7 +333,7 @@ def build_table(raw: pd.DataFrame, spec: Spec, source: str = "", header_row: int
         grain = freq = p_min = p_max = None
         out["_p"] = 0
     for d in spec.dimensions:
-        out[d] = df[d].map(lambda v: MISSING_VALUE if is_empty(v) else str(v).strip())
+        out[d] = df[d].astype(str).str.strip().where(~empty[d], MISSING_VALUE)
     for m in spec.metrics:
         if m.kind == "ratio":
             out[m.N] = evaluate(m.num).fillna(0.0)

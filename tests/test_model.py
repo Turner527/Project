@@ -187,3 +187,42 @@ def test_helper_builds_small_tables_for_other_tests():
     t = table_from([("2026-01", "А", 5)], ["Месяц", "Сегмент", "Значение"],
                    dict(date="Месяц", dimensions=["Сегмент"], metrics=[{"name": "Показатель", "kind": "sum", "column": "Значение"}]))
     assert t.metric("Показатель").kind == "sum" and t.metric("Нет") is None and t.dims == ["Сегмент"]
+
+
+# ---------- векторные пути build_table совпадают с прежним поэлементным определением ----------
+
+
+def test_dimension_cleanup_matches_the_cellwise_definition():
+    import datetime
+    import numpy as np
+
+    from data.model import MISSING_VALUE
+    from data.parsing import is_empty
+
+    values = ["Поиск", " Email ", "", "-", "n/a", None, np.nan, 5, 5.0, 12.5, True, datetime.date(2026, 1, 2), "Итого", " 0 "]
+    raw = frame([["2026-01-01", v, 1, 1] for v in values])
+    t = build_table(raw, Spec(date="Дата", dimensions=["Канал"], metrics=SPEC.metrics), "t")
+    kept = [v for v in values if not (isinstance(v, str) and v.strip().lower().startswith("итого"))]
+    expected = [MISSING_VALUE if is_empty(v) else str(v).strip() for v in kept]
+    assert t.df["Канал"].tolist() == expected
+
+
+def test_total_rows_are_recognised_in_any_key_column_and_only_as_text():
+    rows = [["2026-01-01", "Поиск", 1, 1], ["Итого", "Поиск", 2, 2], ["2026-01-02", "всего по каналам", 3, 3],
+            ["2026-01-03", "Total", 4, 4], ["2026-01-04", "Итоговая смета", 5, 5], ["2026-01-05", "Поиск", 6, 6],
+            ["2026-01-06", "Email", 7, 7]]
+    t = build_table(frame(rows), SPEC, "t")
+    # «Итого», «всего …», «Total» — итоги; «Итоговая смета» — слово, начинающееся так же, но не итог (граница слова)
+    assert t.df["Канал"].tolist() == ["Поиск", "Итоговая смета", "Поиск", "Email"]
+    assert any("итоговых строк" in w and "3" in w for w in t.warnings)
+
+
+def test_numeric_only_key_columns_do_not_break_total_detection():
+    import numpy as np
+
+    raw = pd.DataFrame({"Дата": ["2026-01-01", "2026-01-02", "2026-01-03"], "Код": [1, 2, 3], "Расходы": [10, 20, 30]})
+    spec = Spec(date="Дата", dimensions=["Код"], metrics=[Metric("Расходы", "sum", "Расходы")])
+    t = build_table(raw, spec, "t")
+    assert len(t.df) == 3 and t.df["Код"].tolist() == ["1", "2", "3"]
+    all_nan = pd.DataFrame({"Дата": ["2026-01-01", "2026-01-02"], "Код": [np.nan, np.nan], "Расходы": [1, 2]})
+    assert build_table(all_nan, spec, "t").df["Код"].tolist() == ["(не указано)", "(не указано)"]

@@ -1,7 +1,8 @@
 """Оценка одного ответа агента по эталону и сводка по прогону. Чистые функции, без ввода-вывода.
 
 Три метрики прогона:
-  cause_accuracy    — верно ли названа причина (нужный сегмент, а где требуется — и KPI-драйвер);
+  cause_accuracy    — верно ли названа причина (нужный сегмент, а где требуется — и KPI-драйвер; если у вопроса
+                      задан показатель — ещё и то, что агент разбирал именно его, а не соседний с похожим названием);
   numbers_accuracy  — совпадают ли числа ответа с эталонными числами витрины (с допуском на округление записи);
   unverified_share  — доля ответов, где верификатор нашёл числа, которых нет в результатах инструментов.
 """
@@ -16,6 +17,18 @@ def mentioned(name: str, text: str) -> bool:
     """Название KPI упомянуто в тексте: найдено не меньше 2/3 его основ (допускает «одобрение заявок»)."""
     needed = math.ceil(len(_stems(name)) * 2 / 3)
     return len(_stems(name) & _stems(text)) >= needed
+
+
+ANALYSIS_TOOLS = ("diagnose_change", "get_change", "break_down", "get_related_metrics")
+
+
+def analysed_metric(result, expect: dict) -> bool | None:
+    """Разбирал ли агент нужный показатель: None — у вопроса показатель не задан."""
+    wanted = expect.get("metric")
+    if not wanted:
+        return None
+    return any(c.name in ANALYSIS_TOOLS and str(c.arguments.get("metric", "")).casefold() == wanted.casefold()
+               for c in result.tool_calls)
 
 
 def score_cause(memo, expect: dict) -> bool:
@@ -51,13 +64,15 @@ def evaluate(result, question: dict) -> dict:
     memo = result.memo
     expect = question["expect"]
     numbers_ok, missing = score_numbers(memo, expect)
+    metric_ok = analysed_metric(result, expect)
     verification = result.verification
     return {
         "id": question["id"],
         "anomaly": question["anomaly"],
         "type": question["type"],
         "question": question["question"],
-        "cause_ok": score_cause(memo, expect),
+        "metric_ok": metric_ok,
+        "cause_ok": score_cause(memo, expect) and metric_ok is not False,
         "numbers_ok": numbers_ok,
         "missing_numbers": missing,
         "status": verification.status if verification else "ошибка",

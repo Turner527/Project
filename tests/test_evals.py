@@ -11,7 +11,7 @@ from agent.tool_adapter import make_adapter
 from evals import build_flat_questions, datasets, run_evals
 from evals.build_questions import OUT as QUESTIONS_PATH
 from evals.build_questions import build
-from evals.scoring import aggregate, evaluate, mentioned, score_cause, score_numbers
+from evals.scoring import aggregate, analysed_metric, evaluate, mentioned, score_cause, score_numbers
 from tests.conftest import ANOMALIES_JSON
 from tests.helpers import FakeLLM, call, memo_json, text
 from tools import core, datastore
@@ -282,3 +282,33 @@ def test_unknown_dataset_is_reported(tmp_path):
         datasets.activate("погода", tmp_path)
     assert datasets.activate("demo", tmp_path).name == "kpi.xlsx"
     assert datasets.available() == ["demo", "marketing", "support", "branches"]
+
+
+# ---------- нужный показатель входит в «причину названа верно» ----------
+
+
+def test_wrong_metric_with_the_right_segment_is_not_a_correct_cause(tmp_path, monkeypatch):
+    """Регрессия: агент разобрал соседний показатель, а правильные числа попали в текст как «следствие» — раньше это проходило."""
+    monkeypatch.setenv("KPI_DATA_PATH", str(datasets.activate("support", tmp_path)))
+    datastore._cache.clear()
+    question = {"id": "T", "anomaly": "support", "type": "sla", "question": "Почему упало выполнение SLA?",
+                "expect": {"key_segment": "Техническая поддержка", "driver_kpis_any": [], "metric": "Выполнение SLA",
+                           "numbers": [{"name": "deviation_pct", "value": -5.6}]}}
+    answer = json.loads(memo_json(summary="Выполнение SLA −5,6%, главный вклад даёт очередь Техническая поддержка."))
+    answer["diagnosis"]["key_segments"] = ["Техническая поддержка"]
+    wrong = Agent(FakeLLM([call("diagnose_change", metric="SLA выполнено"), text("ок"), text(json.dumps(answer))]),
+                  make_adapter("direct")).run(question["question"])
+    item = evaluate(wrong, question)
+    assert item["metric_ok"] is False and item["cause_ok"] is False
+    right = Agent(FakeLLM([call("diagnose_change", metric="Выполнение SLA"), text("ок"), text(json.dumps(answer))]),
+                  make_adapter("direct")).run(question["question"])
+    assert evaluate(right, question)["metric_ok"] is True and evaluate(right, question)["cause_ok"] is True
+
+
+def test_metric_check_is_skipped_for_questions_without_a_metric():
+    result = run_fake(call("get_change", metric="NPS"), text("ок"), text(memo_json()))
+    assert analysed_metric(result, {}) is None
+    assert analysed_metric(result, {"metric": "NPS"}) is True and analysed_metric(result, {"metric": "nps"}) is True
+    assert analysed_metric(result, {"metric": "Выдачи розничных кредитов"}) is False
+    only_search = run_fake(call("find_metrics", query="NPS"), text("ок"), text(memo_json()))
+    assert analysed_metric(only_search, {"metric": "NPS"}) is False  # поиск показателя — не его разбор

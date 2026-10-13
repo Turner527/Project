@@ -564,3 +564,17 @@ def test_strategic_controls_have_no_local_deviations_but_the_portfolio_shows_its
     portfolio = core.diagnose_change("Розничный кредитный портфель")  # итог −2% (в пределах допуска), «Молодёжь» просела
     assert not portfolio["deviation"]["significant"]
     assert portfolio["local_deviations"][0]["value"] == "Молодёжь" and portfolio["local_deviations"][0]["change_pct"] < -10
+
+
+def test_a_verbatim_name_beats_another_metric_with_the_same_word_stems(support):
+    """Регрессия с прогона на файле заказчика: «SLA выполнено» (сумма) и «Выполнение SLA» (отношение) имеют одинаковые основы."""
+    hits = core.find_metrics("Почему упало выполнение SLA и в какой очереди?")["metric_matches"]
+    assert [h["metric"] for h in hits][:2] == ["Выполнение SLA", "SLA выполнено"]
+    hits = core.find_metrics("Сколько обращений с SLA выполнено?")["metric_matches"]
+    assert hits[0]["metric"] == "SLA выполнено"  # а когда названо именно оно — выигрывает оно
+
+
+def test_specificity_comes_before_verbatim_matching(marketing):
+    """«Лиды» дословно есть в «конверсия из кликов в лиды», но это не повод предпочесть его «Конверсии в лиды»."""
+    hits = core.find_metrics("Почему упала конверсия из кликов в лиды?")["metric_matches"]
+    assert hits[0]["metric"] == "Конверсия в лиды"

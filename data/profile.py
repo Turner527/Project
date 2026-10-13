@@ -9,7 +9,7 @@ import re
 import pandas as pd
 
 from data.model import Metric, Spec, build_table
-from data.parsing import bool_like_values, date_share, detect_grain, is_empty, parse_date_series, to_number_series
+from data.parsing import bool_like_values, date_share, detect_grain, empty_mask, parse_date_series, to_number_series
 from data.readers import RawFile
 from data.validation import WorkbookError
 from tools.text import stems
@@ -82,8 +82,8 @@ def _unit_from_format(fmt: str) -> tuple[str, float]:
     return "", 1.0
 
 
-def _kind_of(series: pd.Series) -> str:
-    values = series[~series.map(is_empty)]
+def _kind_of(values: pd.Series) -> str:
+    """Тип столбца по его непустым значениям."""
     if values.empty:
         return "empty"
     sample = values.iloc[:: max(1, len(values) // SAMPLE)]
@@ -98,9 +98,9 @@ def _kind_of(series: pd.Series) -> str:
     return "text"
 
 
-def _examples(series: pd.Series, n: int = 3) -> list[str]:
+def _examples(values: pd.Series, n: int = 3) -> list[str]:
     out = []
-    for v in series[~series.map(is_empty)].drop_duplicates().iloc[:n]:
+    for v in values.drop_duplicates().iloc[:n]:
         if isinstance(v, (pd.Timestamp, datetime.datetime)):  # openpyxl отдаёт даты как datetime
             v = v.date()
         out.append(str(v))
@@ -108,12 +108,13 @@ def _examples(series: pd.Series, n: int = 3) -> list[str]:
 
 
 def _column_stats(name: str, series: pd.Series, fmt: str) -> dict:
-    kind = _kind_of(series)
-    empty = int(series.map(is_empty).sum())
-    info = {"name": name, "kind": kind, "missing": empty, "n_unique": int(series.dropna().astype(str).nunique()),
-            "examples": _examples(series), "format": fmt, "role": "ignore", "reason": ""}
+    blank = empty_mask(series)  # один раз на столбец: на больших файлах это заметная часть времени
+    values = series[~blank]
+    kind = _kind_of(values)
+    info = {"name": name, "kind": kind, "missing": int(blank.sum()), "n_unique": int(series.dropna().astype(str).nunique()),
+            "examples": _examples(values), "format": fmt, "role": "ignore", "reason": ""}
     if kind == "number":
-        nums = to_number_series(series).dropna()
+        nums = to_number_series(values).dropna()
         info.update(min=float(nums.min()), max=float(nums.max()),
                     integer=bool((nums == nums.round()).all()), negative=int((nums < 0).sum()))
     return info
@@ -315,23 +316,26 @@ def profile(raw: RawFile, sheet: str | None = None) -> dict:
     neg = [c for c in cols if c["role"] == "metric" and c.get("negative")]
     if neg:
         warnings.append("Есть отрицательные значения: " + ", ".join(f"«{c['name']}» — {c['negative']}" for c in neg[:4]) + ".")
-    table = None
+    rows_excluded = 0
     try:
         table = build_table(df, spec, raw.filename, raw.header_rows.get(sheet, 1))
         warnings += table.warnings
+        rows_excluded = table.rows_excluded
         if grain and table.p_max is not None:
             span = table.p_max - table.p_min + 1
             present = len(table.periods_present())
             if present < span:
                 warnings.append(f"В ряду дат есть пропуски: присутствует {present} из {span} периодов.")
+            if rows_excluded:  # период показываем уже после фильтров: неполный месяц в анализ не попадёт
+                period = {"from": table.label(table.p_min), "to": table.label(table.p_max), "periods": present}
     except WorkbookError as exc:
         warnings += exc.errors
-    del table
 
     return {
         "filename": raw.filename, "kind": raw.kind, "sheet": sheet, "sheets": raw.sheets,
         "header_row": raw.header_rows.get(sheet, 1), "rows": n_rows, "notes": raw.notes[:MAX_NOTES_SHOWN],
-        "columns": cols, "ratios": ratios, "grain": grain, "period": period, "warnings": warnings,
+        "columns": cols, "ratios": ratios, "grain": grain, "period": period, "rows_excluded": rows_excluded,
+        "warnings": warnings,
         "spec": spec.to_dict(),
     }
 

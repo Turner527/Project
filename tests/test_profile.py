@@ -160,6 +160,8 @@ def test_completeness_flag_becomes_a_row_filter():
     assert report["spec"]["filters"] == [{"column": "Период закрыт", "values": ["Да"]}]
     table = build_table(raw.frames["Данные"], Spec.from_dict(report["spec"]), "t")
     assert table.rows_excluded == 2 and len(table.df) == 10 and table.label(table.p_max) == "2026-05"
+    # период в профиле показан уже после фильтра: неполный месяц в анализ не попадёт
+    assert report["rows_excluded"] == 2 and report["period"] == {"from": "2026-01", "to": "2026-05", "periods": 5}
 
 
 def test_an_ordinary_yes_no_dimension_is_not_a_filter():
