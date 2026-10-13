@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI-аналитик стратегического менеджмента</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --ink: #1c2330; --muted: #5d6778; --line: #d9dde4;
+    --accent: #1f3a5f; --accent-ink: #ffffff; --ok: #1d6b45; --ok-bg: #e5f2ea;
+    --warn: #8a4b00; --warn-bg: #fdf0dc; --bad: #9b1c1c; --bad-bg: #fbe6e6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.5 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  header { background: var(--accent); color: var(--accent-ink); padding: 14px 24px;
+           display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; flex: 1 1 320px; }
+  header .meta { font-size: 13px; opacity: .9; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 3px; font-size: 12px; font-weight: 600; }
+  .badge.live { background: #dbe7f7; color: var(--accent); }
+  .badge.offline { background: var(--warn-bg); color: var(--warn); }
+  button { font: inherit; cursor: pointer; border-radius: 4px; border: 1px solid var(--line);
+           background: var(--card); color: var(--ink); padding: 6px 14px; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .55; cursor: default; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  header button { background: transparent; color: var(--accent-ink); border-color: rgba(255,255,255,.55); }
+  main { max-width: 920px; margin: 0 auto; padding: 20px 16px 140px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; margin-bottom: 16px; }
+  .q { background: #e9eef6; border-color: #cdd8ea; }
+  .q small { color: var(--muted); display: block; margin-bottom: 2px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 18px 0 6px; font-weight: 600; }
+  h2:first-child { margin-top: 0; }
+  .status { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .status .badge.ok { background: var(--ok-bg); color: var(--ok); }
+  .status .badge.bad { background: var(--warn-bg); color: var(--warn); }
+  .status .badge.err { background: var(--bad-bg); color: var(--bad); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .chip { background: #eef1f5; border: 1px solid var(--line); border-radius: 3px; padding: 1px 8px; font-size: 13px; }
+  .scenario { border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; margin-bottom: 8px; }
+  .scenario b { display: block; margin-bottom: 2px; }
+  .scenario .effect { margin-top: 4px; }
+  .scenario ul, ul.plain { margin: 4px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+  ul.checks { margin: 0; padding-left: 20px; }
+  mark { background: var(--warn-bg); color: var(--warn); border-bottom: 2px solid #d99a3d; padding: 0 2px; }
+  .unverified { background: var(--warn-bg); border: 1px solid #ecd2a4; color: var(--warn); border-radius: 4px;
+                padding: 8px 12px; margin: 8px 0; font-size: 14px; }
+  .unverified ul { margin: 4px 0 0; padding-left: 20px; }
+  .error { background: var(--bad-bg); border: 1px solid #e3b4b4; color: var(--bad); border-radius: 4px; padding: 10px 12px; }
+  .feedback { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .feedback .note { color: var(--muted); font-size: 13px; }
+  .feedback input { flex: 1 1 260px; font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px; }
+  .feedback button.chosen { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 14px; }
+  details .tool { border-top: 1px solid var(--line); padding: 8px 0; font-size: 14px; }
+  details .tool code { background: #eef1f5; padding: 0 4px; border-radius: 3px; }
+  pre { background: #f6f7f9; border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; overflow: auto;
+        max-height: 320px; font-size: 12.5px; margin: 6px 0 0; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .welcome h2 { margin-bottom: 8px; }
+  .examples { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .examples button { text-align: left; }
+  footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line); padding: 12px 16px; }
+  footer form { max-width: 920px; margin: 0 auto; display: flex; gap: 10px; }
+  footer textarea { flex: 1; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; resize: none; height: 44px; }
+  .overlay { position: fixed; inset: 0; background: rgba(28,35,48,.45); display: none; align-items: center; justify-content: center; padding: 16px; }
+  .overlay.open { display: flex; }
+  .dialog { background: var(--card); border-radius: 6px; padding: 18px 20px; max-width: 640px; width: 100%; max-height: 80vh; overflow: auto; }
+  .dialog h3 { margin: 0 0 8px; }
+  .dialog ul { padding-left: 20px; }
+  .dialog.fail h3 { color: var(--bad); }
+  .dialog.done h3 { color: var(--ok); }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AI-аналитик стратегического менеджмента банка</h1>
+  <div class="meta">
+    <span id="mode" class="badge live">…</span>
+    <span id="dataset" title="Активная витрина данных">…</span>
+    <button id="upload-btn" type="button">Загрузить xlsx</button>
+    <input id="file" type="file" accept=".xlsx" hidden>
+  </div>
+</header>
+
+<main id="chat">
+  <section class="card welcome" id="welcome">
+    <h2>С чего начать</h2>
+    <p class="muted" style="margin-top:0">Задайте вопрос об отклонении от цели или KPI. Все числа в ответе считает код,
+      а не модель; непроверенные числа подсвечиваются.</p>
+    <div class="examples" id="examples"></div>
+  </section>
+</main>
+
+<footer>
+  <form id="form">
+    <textarea id="question" placeholder="Например: почему мы отстаём по цели роста розничного кредитования и что делать?" required minlength="3" maxlength="1000"></textarea>
+    <button class="primary" id="send" type="submit">Спросить</button>
+  </form>
+</footer>
+
+<div class="overlay" id="overlay"><div class="dialog" id="dialog"></div></div>
+
+<script>
+"use strict";
+const EXAMPLES = [
+  "Почему мы отстаём по цели роста розничного кредитования и что делать?",
+  "Почему растёт просрочка и в каком сегменте?",
+  "Что происходит с комиссионными доходами за последние 3 месяца?",
+  "Есть ли проблемы с оттоком клиентов?",
+];
+
+const $ = (id) => document.getElementById(id);
+
+function el(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) node.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c == null || c === false) continue;
+    node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return node;
+}
+
+function clientId() {
+  try {
+    let id = localStorage.getItem("client_id");
+    if (!id) {
+      id = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).replace(/-/g, "");
+      localStorage.setItem("client_id", id);
+    }
+    return id;
+  } catch (e) { return null; }
+}
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  let body = null;
+  try { body = await res.json(); } catch (e) { /* не JSON */ }
+  return { ok: res.ok, status: res.status, body };
+}
+
+/* Текст с подсветкой непроверенных чисел */
+function highlighted(text, unverified) {
+  const values = [...new Set((unverified || []).map((u) => u.value))].filter(Boolean);
+  if (!values.length) return text;
+  const escaped = values.map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const re = new RegExp("(?<![\\d.,])(" + escaped.join("|") + ")(?![\\d])", "g");
+  const out = [];
+  let last = 0, m;
+  while ((m = re.exec(text)) !== null) {
+    out.push(text.slice(last, m.index), el("mark", {}, m[0]));
+    last = m.index + m[0].length;
+  }
+  out.push(text.slice(last));
+  return out;
+}
+
+function statusBadge(data) {
+  if (data.status === "проверен") return el("span", { class: "badge ok" }, "✓ проверен");
+  if (data.status === "ошибка") return el("span", { class: "badge err" }, "ошибка");
+  return el("span", { class: "badge bad" }, "⚠ есть непроверенные числа");
+}
+
+function renderMemo(data) {
+  const memo = data.memo, ver = data.verification;
+  const unv = ver ? ver.unverified : [];
+  const parts = [];
+  parts.push(el("div", { class: "status" }, statusBadge(data),
+    el("span", { class: "muted" }, ver ? `проверено чисел: ${ver.checked}` : "")));
+  if (unv.length) {
+    parts.push(el("div", { class: "unverified" },
+      "Этих чисел нет в результатах инструментов — не используйте их без проверки:",
+      el("ul", {}, unv.map((u) => el("li", {}, el("b", {}, u.value), ` — ${u.context}`)))));
+  }
+  parts.push(el("h2", {}, "Диагноз"));
+  parts.push(el("p", { style: "margin:0 0 6px" }, highlighted(memo.diagnosis.summary, unv)));
+  parts.push(el("div", {}, el("b", {}, "Причина: "), highlighted(memo.diagnosis.root_cause, unv)));
+  if (memo.diagnosis.key_segments.length) {
+    parts.push(el("div", { class: "chips" }, memo.diagnosis.key_segments.map((s) => el("span", { class: "chip" }, s))));
+  }
+  if (memo.scenarios.length) {
+    parts.push(el("h2", {}, "Сценарии"));
+    memo.scenarios.forEach((s, i) => parts.push(el("div", { class: "scenario" },
+      el("b", {}, `${i + 1}. `, highlighted(s.name, unv)),
+      el("div", {}, highlighted(s.description, unv)),
+      el("div", { class: "effect" }, el("b", {}, "Оценка эффекта: "), highlighted(s.effect_estimate, unv)),
+      s.assumptions.length ? el("ul", {}, s.assumptions.map((a) => el("li", {}, highlighted(a, unv)))) : null)));
+  }
+  parts.push(el("h2", {}, "Что проверить вручную"));
+  parts.push(el("ul", { class: "checks" }, memo.manual_checks.map((c) => el("li", {}, highlighted(c, unv)))));
+  if (memo.used_tool_calls.length) {
+    parts.push(el("h2", {}, "Числа взяты из вызовов"));
+    parts.push(el("div", { class: "chips" }, memo.used_tool_calls.map((id) => {
+      const call = data.tool_calls.find((c) => c.call_id === id);
+      return el("span", { class: "chip", title: "Раскройте «Как получен ответ»" }, call ? `${call.tool} · ${id}` : id);
+    })));
+  }
+  return parts;
+}
+
+function renderTrace(data) {
+  const tokens = data.tokens || {};
+  const rows = data.tool_calls.map((c) => el("div", { class: "tool" },
+    el("div", {}, el("code", {}, c.tool), ` (${JSON.stringify(c.arguments)}) → `, el("code", {}, c.call_id),
+      el("span", { class: "muted" }, ` · ${c.duration_ms} мс`), c.error ? el("b", { style: "color:var(--bad)" }, ` · ошибка: ${c.error}`) : null),
+    el("details", {}, el("summary", {}, "Результат инструмента"), el("pre", {}, JSON.stringify(c.result, null, 2)))));
+  return el("details", {},
+    el("summary", {}, "Как получен ответ"),
+    el("p", { class: "muted" },
+      `Модель: ${data.llm} · версия промпта: ${data.prompt_version} · шагов: ${data.steps} · ` +
+      `задержка: ${(data.latency_ms / 1000).toFixed(1)} с · токенов: ${tokens.total ?? 0}`),
+    rows.length ? rows : el("p", { class: "muted" }, "Инструменты не вызывались."),
+    data.raw_text && !data.memo ? el("details", {}, el("summary", {}, "Сырой ответ модели"), el("pre", {}, data.raw_text)) : null);
+}
+
+function renderFeedback(data) {
+  const note = el("span", { class: "note" }, "Ответ был полезен?");
+  const commentBox = el("input", { type: "text", maxlength: "2000", placeholder: "Комментарий (необязательно)", hidden: true });
+  const save = el("button", { type: "button", hidden: true }, "Сохранить комментарий");
+  const buttons = {};
+  async function rate(rating) {
+    const res = await api("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ request_id: data.request_id, rating }) });
+    if (!res.ok) { note.textContent = "Не удалось сохранить оценку."; return; }
+    for (const [k, b] of Object.entries(buttons)) b.classList.toggle("chosen", k === rating);
+    note.textContent = "Спасибо! Можно добавить комментарий.";
+    commentBox.hidden = save.hidden = false;
+  }
+  buttons.useful = el("button", { type: "button", onclick: () => rate("useful") }, "👍 Полезно");
+  buttons.not_useful = el("button", { type: "button", onclick: () => rate("not_useful") }, "👎 Не полезно");
+  save.addEventListener("click", async () => {
+    const res = await api("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ request_id: data.request_id, comment: commentBox.value }) });
+    note.textContent = res.ok ? "Комментарий сохранён." : "Не удалось сохранить комментарий.";
+  });
+  return el("div", { class: "feedback" }, note, buttons.useful, buttons.not_useful, commentBox, save);
+}
+
+function addQuestion(text) {
+  const card = el("section", { class: "card q" }, el("small", {}, "Вопрос"), text);
+  $("chat").append(card);
+  card.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
+function addPending() {
+  const label = el("span", {}, "Анализирую данные");
+  const card = el("section", { class: "card" }, label);
+  let seconds = 0;
+  const timer = setInterval(() => { seconds += 1; label.textContent = `Анализирую данные… ${seconds} с`; }, 1000);
+  $("chat").append(card);
+  return { card, stop: () => clearInterval(timer) };
+}
+
+async function ask(question) {
+  $("welcome").remove();
+  addQuestion(question);
+  $("send").disabled = true;
+  const pending = addPending();
+  try {
+    const res = await api("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, client_id: clientId() }) });
+    pending.stop();
+    const card = pending.card;
+    card.replaceChildren();
+    if (!res.ok) {
+      const msg = res.body && res.body.detail ? (typeof res.body.detail === "string" ? res.body.detail : "Некорректный запрос.") : "Сервер вернул ошибку.";
+      card.append(el("div", { class: "error" }, msg));
+    } else if (res.body.memo) {
+      card.append(...renderMemo(res.body), renderTrace(res.body), renderFeedback(res.body));
+    } else {
+      card.append(statusBadge(res.body), el("div", { class: "error" }, res.body.error || "Ответ не получен."), renderTrace(res.body));
+    }
+    card.scrollIntoView({ block: "start", behavior: "smooth" });
+  } catch (e) {
+    pending.stop();
+    pending.card.replaceChildren(el("div", { class: "error" }, "Нет связи с сервером. Проверьте, что он запущен."));
+  } finally {
+    $("send").disabled = false;
+  }
+}
+
+/* ---- диалоги ---- */
+function showDialog(kind, title, items, hint) {
+  const dialog = $("dialog");
+  dialog.className = "dialog " + kind;
+  dialog.replaceChildren(el("h3", {}, title),
+    items.length ? el("ul", {}, items.map((t) => el("li", {}, t))) : null,
+    hint ? el("div", { class: "hint" }, hint) : null,
+    el("button", { type: "button", class: "primary", onclick: () => $("overlay").classList.remove("open") }, "Закрыть"));
+  $("overlay").classList.add("open");
+}
+
+async function upload(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api("/api/upload", { method: "POST", body: form });
+  if (res.ok) {
+    await refreshStatus();
+    showDialog("done", "Файл принят", [`Данные обновлены: ${file.name}`],
+      "Новые вопросы будут считаться по загруженной витрине. Вернуться к демо-данным: удалите data/uploads/active.xlsx.");
+  } else {
+    const errors = res.body && res.body.errors ? res.body.errors : ["Не удалось загрузить файл."];
+    showDialog("fail", "Файл не прошёл проверку", errors,
+      "Нужны листы goals, facts, links с колонками, описанными в README. Исправьте файл и загрузите снова.");
+  }
+}
+
+async function refreshStatus() {
+  const res = await api("/api/status");
+  if (!res.ok) return;
+  const s = res.body;
+  const mode = $("mode");
+  if (s.llm_error) { mode.className = "badge offline"; mode.textContent = "модель не настроена"; mode.title = s.llm_error; }
+  else if (s.offline) { mode.className = "badge offline"; mode.textContent = "офлайн-заглушка"; mode.title = "Ответы собирает сценарий без обращения к GigaChat"; }
+  else { mode.className = "badge live"; mode.textContent = s.llm; mode.title = "Версия промпта: " + s.prompt_version; }
+  const d = s.dataset;
+  $("dataset").textContent = `${d.is_upload ? "Загруженный файл" : "Демо-данные"}: ${d.kpis} KPI, ${d.first_month} – ${d.last_month}`;
+}
+
+/* ---- события ---- */
+$("form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = $("question").value.trim();
+  if (q.length < 3 || $("send").disabled) return;
+  $("question").value = "";
+  ask(q);
+});
+$("question").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); }
+});
+$("upload-btn").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", (e) => { if (e.target.files[0]) upload(e.target.files[0]); e.target.value = ""; });
+$("overlay").addEventListener("click", (e) => { if (e.target.id === "overlay") $("overlay").classList.remove("open"); });
+EXAMPLES.forEach((q) => $("examples").append(el("button", { type: "button", onclick: () => { $("question").value = q; $("question").focus(); } }, q)));
+refreshStatus();
+</script>
+</body>
+</html>

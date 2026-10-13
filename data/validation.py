@@ -70,7 +70,10 @@ def _read_workbook(source: str | Path | bytes | BinaryIO) -> dict[str, pd.DataFr
         return pd.read_excel(source, sheet_name=None, dtype=object, engine="openpyxl")
     except Exception as exc:  # битый zip, не xlsx, защищённый паролем и т.п.
         raise WorkbookError(
-            [f"Не удалось открыть файл как Excel (.xlsx): {exc}. Загрузите файл в формате .xlsx."]
+            [
+                "Не удалось открыть файл как Excel (.xlsx): файл повреждён, защищён паролем или имеет другой "
+                f"формат ({type(exc).__name__}). Сохраните книгу как .xlsx без пароля и загрузите снова."
+            ]
         ) from exc
 
 
