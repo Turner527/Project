@@ -191,3 +191,78 @@ def test_switching_the_model_is_local_only(tmp_path, monkeypatch):
     client, _ = gigachat_client(tmp_path, monkeypatch)
     remote = TestClient(client.app, client=("203.0.113.5", 5000))
     assert remote.post("/api/model", json={"model": "GigaChat-3-Ultra"}).status_code == 403
+
+
+# ---------- запись .env и параллельные запросы ----------
+
+
+def test_write_env_is_atomic_and_keeps_private_permissions(tmp_path, monkeypatch):
+    path = tmp_path / ".env"
+    path.write_text("GIGACHAT_CREDENTIALS=secret\n")
+    write_env(path, {"GIGACHAT_MODEL": "GigaChat-2"})
+    assert oct(path.stat().st_mode & 0o777) == "0o600" and not list(tmp_path.glob(".env.*.tmp"))
+
+    def boom(src, dst):
+        raise OSError("диск переполнен")
+
+    monkeypatch.setattr(os, "replace", boom)
+    with pytest.raises(OSError):
+        write_env(path, {"GIGACHAT_MODEL": "GigaChat-3-Ultra"})
+    assert path.read_text() == "GIGACHAT_CREDENTIALS=secret\nGIGACHAT_MODEL=GigaChat-2\n"  # прежний файл цел
+    assert not list(tmp_path.glob(".env.*.tmp"))
+
+
+def test_parallel_writers_do_not_lose_each_others_lines(tmp_path):
+    import threading
+
+    path = tmp_path / ".env"
+    path.write_text("GIGACHAT_CREDENTIALS=secret\n")
+    threads = [threading.Thread(target=write_env, args=(path, {f"KEY_{i}": str(i)})) for i in range(24)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    lines = path.read_text().splitlines()
+    assert lines[0] == "GIGACHAT_CREDENTIALS=secret" and sorted(lines[1:]) == sorted(f"KEY_{i}={i}" for i in range(24))
+
+
+def test_a_failed_save_to_env_is_a_json_error_and_keeps_the_previous_model(tmp_path, monkeypatch):
+    client, env_file = gigachat_client(tmp_path, monkeypatch)
+    monkeypatch.setattr(os, "replace", lambda src, dst: (_ for _ in ()).throw(OSError("диск только для чтения")))
+    r = client.post("/api/model", json={"model": "GigaChat-3-Ultra"})
+    assert r.status_code == 500 and r.json()["ok"] is False and "Не удалось сохранить" in r.json()["detail"]
+    assert client.get("/api/status").json()["llm"] == "gigachat:GigaChat-2-Pro" and not env_file.exists()
+    monkeypatch.delenv("GIGACHAT_MODEL", raising=False)
+
+
+def test_a_broken_gigachat_setup_is_named_in_the_409(tmp_path, monkeypatch):
+    for name in ("GIGACHAT_CREDENTIALS", "GIGACHAT_SCOPE", "GIGACHAT_CA_BUNDLE", "GIGACHAT_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("LLM_BACKEND", "gigachat")
+    app = create_app(llm=None, adapter=make_adapter("direct"), store=LogStore(tmp_path / "l.db"), load_env_file=False,
+                     env_path=tmp_path / ".env", certs_dir=tmp_path / "certs")
+    client = TestClient(app)
+    error = client.get("/api/status").json()["llm_error"]
+    assert error
+    r = client.post("/api/model", json={"model": "GigaChat-3-Ultra"})
+    assert r.status_code == 409 and r.json()["detail"] == f"GigaChat не настроен: {error}"
+
+
+def test_model_switch_waits_for_a_connection_change_in_progress(tmp_path, monkeypatch):
+    import threading
+
+    from app import connect as connect_mod
+
+    client, _ = gigachat_client(tmp_path, monkeypatch)
+    result = {}
+    done = threading.Event()
+
+    def switch():
+        result["r"] = client.post("/api/model", json={"model": "GigaChat-3-Ultra"})
+        done.set()
+
+    with connect_mod.ENV_LOCK:  # идёт /api/connect: смена модели ждёт его окончания
+        worker = threading.Thread(target=switch)
+        worker.start()
+        assert not done.wait(0.4)
+    assert done.wait(5) and result["r"].status_code == 200
+    worker.join()
+    monkeypatch.delenv("GIGACHAT_MODEL", raising=False)

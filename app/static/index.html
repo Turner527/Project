@@ -1022,7 +1022,7 @@ const KNOWN_MODELS = ["GigaChat-2", "GigaChat-2-Pro", "GigaChat-2-Max", "GigaCha
 
 /* Выбор модели у уже подключённого GigaChat: список берётся у аккаунта, пока он не пришёл — встроенный */
 function modelPicker() {
-  const current = (status.llm || "").replace(/^gigachat:/, "");
+  const current = ((status && status.llm) || "").replace(/^gigachat:/, "");
   const select = el("select", { id: "model-select", "aria-label": "Модель GigaChat" }, el("option", { value: current }, current));
   const apply = el("button", { class: "btn primary sm", type: "button", disabled: true }, "Использовать");
   const msg = el("div", { class: "alert bad hidden" });
@@ -1033,11 +1033,13 @@ function modelPicker() {
     if (!res.ok) { note.textContent = "Список моделей получить не удалось: можно ввести название ниже."; return; }
     select.replaceChildren(...res.body.models.map((m) => el("option", { value: m, selected: m === res.body.current }, m)));
     note.textContent = res.body.source === "api" ? "Список получен от вашего аккаунта GigaChat." : "Список аккаунта недоступен, показаны известные модели.";
-  });
+  }).catch(() => { note.textContent = "Список моделей получить не удалось: нет связи с сервером."; });
   select.addEventListener("change", () => { apply.disabled = select.value === current; });
   apply.addEventListener("click", async () => {
     apply.disabled = true; msg.classList.add("hidden");
-    const res = await api("/api/model", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: select.value }) });
+    let res;
+    try { res = await api("/api/model", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: select.value }) }); }
+    catch (e) { res = { ok: false, body: { detail: "Нет связи с сервером. Проверьте, что он запущен." } }; }
     if (res.ok) { await refreshStatus(); openDialog("done", "Модель выбрана", el("p", {}, `Дальше отвечает ${select.value}. Выбор сохранён в .env. Уже построенный дашборд остался прежним: его можно перестроить на новой модели.`)); return; }
     const d = res.body && res.body.detail;
     msg.textContent = typeof d === "string" ? d : "Не удалось сменить модель."; msg.classList.remove("hidden"); apply.disabled = false;
@@ -1067,7 +1069,9 @@ function showConnect() {
     const data = new FormData();
     data.append("credentials", key.value); data.append("scope", scope.value); data.append("model", model.value);
     if (cert.files[0]) data.append("ca_file", cert.files[0]);
-    const res = await api("/api/connect", { method: "POST", body: data });
+    let res;
+    try { res = await api("/api/connect", { method: "POST", body: data }); }
+    catch (err) { res = { ok: false, body: { detail: "Нет связи с сервером. Проверьте, что он запущен." } }; }
     submit.disabled = false; submit.textContent = "Проверить и сохранить";
     if (res.ok) {
       key.value = "";
@@ -1079,7 +1083,7 @@ function showConnect() {
       msg.classList.remove("hidden");
     }
   });
-  if (!s.llm_error && !s.offline) body.push(modelPicker());
+  if (status && s.llm && !s.llm_error && !s.offline) body.push(modelPicker());
   body.push(form, el("p", {}, "Ключ проверяется живым запросом и сохраняется локально в .env. Проверка SSL всегда включена."));
   const dialog = openDialog("info", "Подключение к GigaChat", ...body);
   key.focus();

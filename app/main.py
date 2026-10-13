@@ -151,12 +151,13 @@ def create_app(
         cert = ca_file.file.read(1024 * 1024 + 1) if ca_file and ca_file.filename else None
         if cert is not None and len(cert) > 1024 * 1024:
             return _upload_error("Файл сертификата больше 1 МБ.", 413)
-        try:
-            new_llm = connect_mod.connect(credentials, scope, model, cert, env_path or connect_mod.ENV_PATH,
-                                          certs_dir or connect_mod.CERTS_DIR, verify or connect_mod.verify_token)
-        except LLMError as exc:
-            return JSONResponse({"ok": False, "detail": str(exc)}, status_code=422)
-        state["llm"], state["error"] = new_llm, None
+        with connect_mod.ENV_LOCK:  # подключение и смена модели не перебивают друг друга
+            try:
+                new_llm = connect_mod.connect(credentials, scope, model, cert, env_path or connect_mod.ENV_PATH,
+                                              certs_dir or connect_mod.CERTS_DIR, verify or connect_mod.verify_token)
+            except LLMError as exc:
+                return JSONResponse({"ok": False, "detail": str(exc)}, status_code=422)
+            state["llm"], state["error"] = new_llm, None
         return JSONResponse({"ok": True, "llm": new_llm.name})
 
     @app.get("/api/models")
@@ -175,13 +176,18 @@ def create_app(
         """Переключает модель подключённого GigaChat и запоминает выбор в .env. Только с локального адреса."""
         if (request.client.host if request.client else "") not in connect_mod.LOCAL_HOSTS:
             raise HTTPException(403, "Смена модели из интерфейса доступна только с локального компьютера.")
-        if not isinstance(state["llm"], GigaChatLLM):
-            return JSONResponse({"ok": False, "detail": "Сначала подключите GigaChat: сейчас работает офлайн-заглушка."}, status_code=409)
-        try:
-            state["llm"] = connect_mod.switch_model(state["llm"], req.model, env_path or connect_mod.ENV_PATH)
-        except LLMError as exc:
-            return JSONResponse({"ok": False, "detail": str(exc)}, status_code=422)
-        return JSONResponse({"ok": True, "llm": state["llm"].name})
+        with connect_mod.ENV_LOCK:  # текущее подключение читается уже под замком: иначе его могла бы заменить /api/connect
+            if not isinstance(state["llm"], GigaChatLLM):
+                detail = ("Сначала подключите GigaChat." if state["llm"] is not None or state["error"] is None
+                          else f"GigaChat не настроен: {state['error']}")
+                return JSONResponse({"ok": False, "detail": detail}, status_code=409)
+            try:
+                state["llm"] = connect_mod.switch_model(state["llm"], req.model, env_path or connect_mod.ENV_PATH)
+            except LLMError as exc:
+                return JSONResponse({"ok": False, "detail": str(exc)}, status_code=422)
+            except OSError as exc:
+                return JSONResponse({"ok": False, "detail": f"Не удалось сохранить выбор в .env: {exc}"}, status_code=500)
+            return JSONResponse({"ok": True, "llm": state["llm"].name})
 
     @app.post("/api/upload")
     def upload(file: UploadFile = File(...)) -> JSONResponse:

@@ -5,6 +5,8 @@ from pathlib import Path
 
 import dataclasses
 import re
+import tempfile
+import threading
 
 from agent.llm import ROOT, GigaChatConfig, GigaChatLLM, LLMError, available_models, explain_error
 
@@ -32,22 +34,34 @@ def check_pem(path: Path) -> None:
         raise LLMError("В файле нет ни одного сертификата удостоверяющего центра.")
 
 
+ENV_LOCK = threading.RLock()  # одна запись .env и одна смена подключения за раз: запросы идут в разных потоках
+
+
 def write_env(path: Path, updates: dict[str, str]) -> None:
-    """Обновляет нужные строки .env, остальное сохраняет; права 600, т.к. внутри ключ."""
+    """Обновляет нужные строки .env, остальное сохраняет; права 600, т.к. внутри ключ. Запись атомарна: файл целиком
+    пишется во временный и подменяется, поэтому сбой или параллельный запрос не оставят .env пустым или обрезанным."""
     if any("\n" in v or "\r" in v for v in updates.values()):
         raise ValueError("значение содержит перевод строки")
-    lines = path.read_text("utf-8").splitlines() if path.exists() else []
-    seen, out = set(), []
-    for line in lines:
-        key = line.split("=", 1)[0].strip()
-        if "=" in line and not line.lstrip().startswith("#") and key in updates:
-            out.append(f"{key}={updates[key]}")
-            seen.add(key)
-        else:
-            out.append(line)
-    out += [f"{k}={v}" for k, v in updates.items() if k not in seen]
-    path.write_text("\n".join(out) + "\n", "utf-8")
-    os.chmod(path, 0o600)
+    with ENV_LOCK:  # чтение и запись — одним куском, иначе два писателя потеряют правки друг друга
+        lines = path.read_text("utf-8").splitlines() if path.exists() else []
+        seen, out = set(), []
+        for line in lines:
+            key = line.split("=", 1)[0].strip()
+            if "=" in line and not line.lstrip().startswith("#") and key in updates:
+                out.append(f"{key}={updates[key]}")
+                seen.add(key)
+            else:
+                out.append(line)
+        out += [f"{k}={v}" for k, v in updates.items() if k not in seen]
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".env.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(out) + "\n")
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, path)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
 
 
 MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
