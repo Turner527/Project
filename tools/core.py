@@ -269,6 +269,11 @@ def diagnose_change(metric: MetricArg, period_from: FromArg = None, period_to: T
     out["primary_dimension"] = primary["dimension"] if primary else None
     out["dimensions"] = [{k: v for k, v in d.items() if k != "_cmp"} for d in scan]
     out["drill_down"] = E.drill_down(t, m, win, base, where, primary) if primary else []
+    local = E.local_deviations(m, total, scan)
+    if local:
+        out["local_deviations"] = local
+        out["local_note"] = ("Итог в пределах допуска или лучше базы, но внутри есть заметные ухудшения: это повод проверить "
+                             "указанные значения, а не объяснение изменения итога.")
     top_value = str(primary["_cmp"].groups.index[0]) if primary else None
     out["related_metrics"] = E.related(t, m, total, where, out["primary_dimension"], primary_value=top_value)
     scenarios = E.scenarios(primary["_cmp"], m.unit) if primary else []

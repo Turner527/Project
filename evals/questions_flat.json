@@ -1,0 +1,492 @@
+{
+  "source": "data/generate_samples.py",
+  "count": 18,
+  "questions": [
+    {
+      "id": "M1-why_spend",
+      "anomaly": "marketing",
+      "type": "why_spend",
+      "dataset": "marketing",
+      "question": "Почему выросли расходы на рекламу и в каком канале?",
+      "expect": {
+        "key_segment": "Поиск",
+        "driver_kpis_any": [],
+        "cause_label": "Рост расходов в канале «Поиск»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 10.9
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 101.7
+          }
+        ],
+        "metric": "Расходы",
+        "window": {
+          "from": "2026-09-01",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "M1-conversion",
+      "anomaly": "marketing",
+      "type": "conversion",
+      "dataset": "marketing",
+      "question": "Почему упала конверсия из кликов в лиды?",
+      "expect": {
+        "key_segment": "Поиск",
+        "driver_kpis_any": [
+          "Лиды"
+        ],
+        "cause_label": "Падение лидов в канале «Поиск»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -7.8
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 102.6
+          }
+        ],
+        "metric": "Конверсия в лиды",
+        "window": {
+          "from": "2026-09-01",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "M1-cost_lead",
+      "anomaly": "marketing",
+      "type": "cost_lead",
+      "dataset": "marketing",
+      "question": "Почему выросла стоимость лида и где именно?",
+      "expect": {
+        "key_segment": "Поиск",
+        "driver_kpis_any": [
+          "Расходы",
+          "Лиды"
+        ],
+        "cause_label": "Рост расходов при падении лидов в «Поиске»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 20.6
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 99.2
+          }
+        ],
+        "metric": "Стоимость лида",
+        "window": {
+          "from": "2026-09-01",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "M1-roas",
+      "anomaly": "marketing",
+      "type": "roas",
+      "dataset": "marketing",
+      "question": "Что случилось с ROAS, окупаемостью рекламы?",
+      "expect": {
+        "key_segment": "Поиск",
+        "driver_kpis_any": [
+          "Выручка",
+          "Расходы"
+        ],
+        "cause_label": "Расходы выросли, выручка упала в «Поиске»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -16.6
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 101.0
+          }
+        ],
+        "metric": "ROAS",
+        "window": {
+          "from": "2026-09-01",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "M1-two_weeks",
+      "anomaly": "marketing",
+      "type": "two_weeks",
+      "dataset": "marketing",
+      "question": "Что происходит с конверсией в лиды за последние две недели?",
+      "expect": {
+        "key_segment": "Поиск",
+        "driver_kpis_any": [
+          "Лиды"
+        ],
+        "cause_label": "Падение лидов в канале «Поиск»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -14.5
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 95.0
+          }
+        ],
+        "metric": "Конверсия в лиды",
+        "window": {
+          "from": "2026-09-17",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "M1-board_memo",
+      "anomaly": "marketing",
+      "type": "board_memo",
+      "dataset": "marketing",
+      "question": "Подготовь записку: что случилось с выручкой и какие есть варианты действий?",
+      "expect": {
+        "key_segment": "Поиск",
+        "driver_kpis_any": [],
+        "cause_label": "Падение выручки в канале «Поиск»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -7.6
+          },
+          {
+            "name": "s1_effect_abs",
+            "value": 765514.0
+          }
+        ],
+        "metric": "Выручка",
+        "window": {
+          "from": "2026-09-01",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "M2-control_impressions",
+      "anomaly": "marketing",
+      "type": "control",
+      "dataset": "marketing",
+      "question": "Есть ли проблемы с показами? Нужно ли что-то менять?",
+      "expect": {
+        "key_segment": null,
+        "driver_kpis_any": [],
+        "cause_label": "Значимого отклонения нет",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 0.1
+          }
+        ],
+        "metric": "Показы",
+        "window": {
+          "from": "2026-09-01",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "M2-control_clicks",
+      "anomaly": "marketing",
+      "type": "control",
+      "dataset": "marketing",
+      "question": "Всё ли в порядке с кликами? Нужно ли что-то менять?",
+      "expect": {
+        "key_segment": null,
+        "driver_kpis_any": [],
+        "cause_label": "Значимого отклонения нет",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -0.2
+          }
+        ],
+        "metric": "Клики",
+        "window": {
+          "from": "2026-09-01",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "S1-sla",
+      "anomaly": "support",
+      "type": "sla",
+      "dataset": "support",
+      "question": "Почему упало выполнение SLA и в какой очереди?",
+      "expect": {
+        "key_segment": "Техническая поддержка",
+        "driver_kpis_any": [
+          "SLA выполнено"
+        ],
+        "cause_label": "Падение SLA в очереди «Техническая поддержка»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -5.6
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 100.2
+          }
+        ],
+        "metric": "Выполнение SLA",
+        "window": {
+          "from": "2026-09-01",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "S1-csat",
+      "anomaly": "support",
+      "type": "csat",
+      "dataset": "support",
+      "question": "Что случилось с CSAT и почему?",
+      "expect": {
+        "key_segment": "Техническая поддержка",
+        "driver_kpis_any": [
+          "Положительные оценки"
+        ],
+        "cause_label": "Падение оценок в очереди «Техническая поддержка»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -4.3
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 101.3
+          }
+        ],
+        "metric": "CSAT",
+        "window": {
+          "from": "2026-09-01",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "S1-handle_time",
+      "anomaly": "support",
+      "type": "handle_time",
+      "dataset": "support",
+      "question": "Почему выросло среднее время обработки обращений?",
+      "expect": {
+        "key_segment": "Техническая поддержка",
+        "driver_kpis_any": [
+          "Минуты обработки",
+          "Решено"
+        ],
+        "cause_label": "Рост времени обработки в очереди «Техническая поддержка»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 19.8
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 99.3
+          }
+        ],
+        "metric": "Среднее время обработки",
+        "window": {
+          "from": "2026-09-01",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "S1-two_weeks",
+      "anomaly": "support",
+      "type": "two_weeks",
+      "dataset": "support",
+      "question": "Что со средним временем обработки за последние 14 дней?",
+      "expect": {
+        "key_segment": "Техническая поддержка",
+        "driver_kpis_any": [
+          "Минуты обработки",
+          "Решено"
+        ],
+        "cause_label": "Рост времени обработки в очереди «Техническая поддержка»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 15.1
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 98.8
+          }
+        ],
+        "metric": "Среднее время обработки",
+        "window": {
+          "from": "2026-09-17",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "S1-colloquial",
+      "anomaly": "support",
+      "type": "colloquial",
+      "dataset": "support",
+      "question": "Шеф спрашивает, что не так с CSAT. Разберись и предложи меры.",
+      "expect": {
+        "key_segment": "Техническая поддержка",
+        "driver_kpis_any": [],
+        "cause_label": "Падение оценок в очереди «Техническая поддержка»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -4.3
+          }
+        ],
+        "metric": "CSAT",
+        "window": {
+          "from": "2026-09-01",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "S2-control_new",
+      "anomaly": "support",
+      "type": "control",
+      "dataset": "support",
+      "question": "Есть ли проблемы с количеством новых обращений?",
+      "expect": {
+        "key_segment": null,
+        "driver_kpis_any": [],
+        "cause_label": "Значимого отклонения нет",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 0.3
+          }
+        ],
+        "metric": "Новые обращения",
+        "window": {
+          "from": "2026-09-01",
+          "to": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "B1-conversion",
+      "anomaly": "branches",
+      "type": "conversion",
+      "dataset": "branches",
+      "question": "Почему упала конверсия сделок за последние два месяца и в каких отделениях?",
+      "expect": {
+        "key_segment": "Москва Север",
+        "driver_kpis_any": [],
+        "cause_label": "Падение конверсии в отделении «Москва Север»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -4.8
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 72.5
+          }
+        ],
+        "metric": "Конверсия сделок",
+        "window": {
+          "from": "2026-08-01",
+          "to": "2026-09-01"
+        }
+      }
+    },
+    {
+      "id": "B1-hidden_problem",
+      "anomaly": "branches",
+      "type": "hidden",
+      "dataset": "branches",
+      "question": "Что происходит с конверсией сделок?",
+      "expect": {
+        "key_segment": "Москва Север",
+        "driver_kpis_any": [],
+        "cause_label": "Итог в норме, но конверсия упала в отделении «Москва Север»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": -2.1
+          },
+          {
+            "name": "local_change_pct",
+            "value": -14.1
+          }
+        ],
+        "metric": "Конверсия сделок",
+        "window": {
+          "from": "2026-06-01",
+          "to": "2026-09-01"
+        }
+      }
+    },
+    {
+      "id": "B1-expenses",
+      "anomaly": "branches",
+      "type": "expenses",
+      "dataset": "branches",
+      "question": "Почему растут расходы отделений?",
+      "expect": {
+        "key_segment": "Новосибирск",
+        "driver_kpis_any": [],
+        "cause_label": "Рост расходов в отделении «Новосибирск»",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 6.1
+          },
+          {
+            "name": "key_segment_contribution_pct",
+            "value": 51.5
+          }
+        ],
+        "metric": "Расходы",
+        "window": {
+          "from": "2026-06-01",
+          "to": "2026-09-01"
+        }
+      }
+    },
+    {
+      "id": "B2-control_income",
+      "anomaly": "branches",
+      "type": "control",
+      "dataset": "branches",
+      "question": "Выполняется ли план по доходу?",
+      "expect": {
+        "key_segment": null,
+        "driver_kpis_any": [],
+        "cause_label": "Значимого отклонения нет",
+        "numbers": [
+          {
+            "name": "deviation_pct",
+            "value": 0.5
+          }
+        ],
+        "metric": "Доход",
+        "window": {
+          "from": "2026-06-01",
+          "to": "2026-09-01"
+        }
+      }
+    }
+  ]
+}

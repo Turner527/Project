@@ -1,5 +1,6 @@
 import csv
 import json
+import os
 
 import pytest
 
@@ -7,13 +8,13 @@ from agent.loop import Agent
 from agent.schemas import Diagnosis, Memo
 from agent.stub_llm import ScriptedLLM
 from agent.tool_adapter import make_adapter
-from evals import run_evals
+from evals import build_flat_questions, datasets, run_evals
 from evals.build_questions import OUT as QUESTIONS_PATH
 from evals.build_questions import build
 from evals.scoring import aggregate, evaluate, mentioned, score_cause, score_numbers
 from tests.conftest import ANOMALIES_JSON
 from tests.helpers import FakeLLM, call, memo_json, text
-from tools import core
+from tools import core, datastore
 
 
 def memo(summary="", root="", segments=(), ):
@@ -194,3 +195,90 @@ def test_runner_reports_config_problems(monkeypatch, capsys, tmp_path):
     code = run_evals.main(["--backend", "gigachat", "--results", str(tmp_path / "r.csv")])
     assert code == 2 and "GIGACHAT_CREDENTIALS" in capsys.readouterr().err
     assert not (tmp_path / "r.csv").exists()
+
+
+# ======================================================================================================================
+# Плоские отчёты: вопросы с эталоном, посчитанным на pandas
+# ======================================================================================================================
+
+
+@pytest.fixture(scope="module")
+def flat_questions():
+    return json.loads(build_flat_questions.OUT.read_text("utf-8"))["questions"]
+
+
+def test_flat_questions_are_in_sync_with_the_builder_and_well_formed(flat_questions):
+    rebuilt = json.loads(json.dumps(build_flat_questions.build(), ensure_ascii=False, default=str))
+    assert flat_questions == rebuilt
+    assert 15 <= len(flat_questions) <= 25 and len({q["id"] for q in flat_questions}) == len(flat_questions)
+    assert {q["dataset"] for q in flat_questions} == {"marketing", "support", "branches"}
+    assert {q["anomaly"] for q in flat_questions} == {"marketing", "support", "branches"}
+    for q in flat_questions:
+        assert q["expect"]["numbers"] and q["expect"]["metric"] and q["expect"]["window"], q["id"]
+        if q["type"] == "control":
+            assert q["expect"]["key_segment"] is None and q["expect"]["cause_label"] == "Значимого отклонения нет"
+        else:
+            assert q["expect"]["key_segment"] and q["expect"]["cause_label"], q["id"]
+    assert {q["dataset"] for q in flat_questions if q["type"] == "control"} == {"marketing", "support", "branches"}
+
+
+def test_pandas_reference_agrees_with_the_tools_on_every_flat_question(flat_questions, tmp_path, monkeypatch):
+    """Эталон посчитан независимо (pandas, тот же генератор образцов); инструменты по эталонному вызову обязаны совпасть."""
+    for name in ("marketing", "support", "branches"):
+        monkeypatch.setenv("KPI_DATA_PATH", str(datasets.activate(name, tmp_path)))
+        datastore._cache.clear()
+        for q in (q for q in flat_questions if q["dataset"] == name):
+            exp, numbers = q["expect"], {n["name"]: n["value"] for n in q["expect"]["numbers"]}
+            res = core.diagnose_change(exp["metric"], period_from=exp["window"]["from"], period_to=exp["window"]["to"])
+            assert "error" not in res, (q["id"], res)
+            assert res["deviation"]["deviation_pct"] == numbers["deviation_pct"], q["id"]
+            top = res["dimensions"][0]["top"][0]
+            if q["type"] == "hidden":  # итог в норме, но значение измерения просело: ищем его в local_deviations
+                assert not res["deviation"]["significant"], q["id"]
+                local = res["local_deviations"][0]
+                assert local["value"] == exp["key_segment"] and local["change_pct"] == numbers["local_change_pct"], q["id"]
+            elif exp["key_segment"]:
+                assert top["value"] == exp["key_segment"], q["id"]
+                assert res["deviation"]["significant"] and res["deviation"]["unfavorable"], q["id"]
+                if "key_segment_contribution_pct" in numbers:
+                    assert top["contribution_pct"] == numbers["key_segment_contribution_pct"], q["id"]
+                if "s1_effect_abs" in numbers:
+                    assert res["recovery_scenarios"][0]["effect_abs"] == pytest.approx(numbers["s1_effect_abs"], abs=1e-6)
+            else:
+                assert not res["deviation"]["significant"], q["id"]  # контрольный вопрос: значимого изменения нет
+
+
+def test_stub_reaches_perfect_score_on_the_flat_set_and_the_table_names_the_datasets(paths):
+    args, tmp = paths
+    assert run_evals.main(args + ["--set", "flat"]) == 0
+    with (tmp / "r.csv").open(encoding="utf-8") as fh:
+        (row,) = list(csv.DictReader(fh))
+    assert row["dataset"] == "marketing+support+branches" and row["n"] == str(len(json.loads(build_flat_questions.OUT.read_text("utf-8"))["questions"])) and row["errors"] == "0"
+    assert float(row["cause_accuracy"]) == 1.0 and float(row["numbers_accuracy"]) == 1.0 and float(row["unverified_share"]) == 0.0
+
+
+def test_one_run_can_switch_between_datasets_and_restores_the_environment(paths, monkeypatch):
+    args, tmp = paths
+    before = os.environ["KPI_DATA_PATH"]
+    ids = "A1-why_goal,M1-why_spend,S1-sla,B1-expenses"
+    assert run_evals.main(args + ["--set", "all", "--ids", ids, "--note", "смена наборов"]) == 0
+    with (tmp / "r.csv").open(encoding="utf-8") as fh:
+        (row,) = list(csv.DictReader(fh))
+    assert row["dataset"] == "kpi.xlsx+marketing+support+branches" and row["n"] == "4"
+    assert float(row["cause_accuracy"]) == 1.0 and float(row["numbers_accuracy"]) == 1.0
+    assert os.environ["KPI_DATA_PATH"] == before  # переменная нужна только на время прогона
+
+
+def test_runs_on_different_datasets_are_not_compared_with_each_other(paths, capsys):
+    args, tmp = paths
+    run_evals.main(args + ["--ids", "A1-why_goal"])
+    capsys.readouterr()
+    run_evals.main(args + ["--set", "flat", "--ids", "M1-why_spend"])
+    assert "Предыдущих прогонов этой модели нет" in capsys.readouterr().out
+
+
+def test_unknown_dataset_is_reported(tmp_path):
+    with pytest.raises(ValueError, match="Неизвестный набор данных «погода»"):
+        datasets.activate("погода", tmp_path)
+    assert datasets.activate("demo", tmp_path).name == "kpi.xlsx"
+    assert datasets.available() == ["demo", "marketing", "support", "branches"]

@@ -1,16 +1,19 @@
 """Прогон агента по вопросам с эталонами.
 
-Запуск:  python -m evals.run_evals [--backend stub|gigachat] [--tools mcp|direct] [--limit N] [--note "..."]
+Запуск:  python -m evals.run_evals [--set demo|flat|all] [--backend stub|gigachat] [--tools mcp|direct] [--limit N]
+                                   [--note "..."]
 
-Результат: строка в evals/results.csv (дата, версия промпта, три метрики) и подробности по каждому вопросу в
-evals/details/<время>.json. В конце печатается сравнение с предыдущим прогоном той же модели — так видно
-эффект правки промпта. Всегда используется демо-витрина data/kpi.xlsx, загруженные пользователем файлы не влияют.
+Наборы вопросов: demo — демо-витрина из трёх листов (data/kpi.xlsx), flat — плоские отчёты из data/samples (маркетинг,
+поддержка, сеть отделений), all — оба. Результат: строка в evals/results.csv (дата, версия промпта, три метрики) и
+подробности по каждому вопросу в evals/details/<время>.json. В конце печатается сравнение с предыдущим прогоном той же
+модели на тех же данных — так видно эффект правки промпта. Файлы, загруженные пользователем, на evals не влияют.
 """
 import argparse
 import csv
 import json
 import os
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,11 +21,14 @@ from agent.llm import ConfigError, load_env, make_llm
 from agent.loop import Agent
 from agent.prompts import PROMPT_VERSION
 from agent.tool_adapter import make_adapter
+from evals import datasets
 from evals.scoring import aggregate, evaluate
 from tools import datastore
 
 HERE = Path(__file__).parent
 QUESTIONS = HERE / "questions.json"
+QUESTIONS_FLAT = HERE / "questions_flat.json"
+SETS = {"demo": (QUESTIONS,), "flat": (QUESTIONS_FLAT,), "all": (QUESTIONS, QUESTIONS_FLAT)}
 RESULTS = HERE / "results.csv"
 DETAILS_DIR = HERE / "details"
 COLUMNS = ["date", "prompt_version", "llm", "tools_backend", "dataset", "n", "errors", "cause_accuracy",
@@ -36,6 +42,23 @@ def load_questions(path: Path = QUESTIONS, ids: list[str] | None = None, limit: 
     if ids:
         questions = [q for q in questions if q["id"] in ids]
     return questions[:limit] if limit else questions
+
+
+def run_grouped(llm, tools: str | None, questions: list[dict], workdir: Path, progress=print) -> list[dict]:
+    """Прогоняет вопросы по наборам данных: для каждого набора свой процесс инструментов с нужным KPI_DATA_PATH."""
+    names = list(dict.fromkeys(q.get("dataset") or datasets.DEMO for q in questions))
+    items: list[dict] = []
+    for name in names:
+        group = [q for q in questions if (q.get("dataset") or datasets.DEMO) == name]
+        os.environ["KPI_DATA_PATH"] = str(datasets.activate(name, workdir))
+        datastore._cache.clear()
+        progress(f"\nНабор данных: {name} ({len(group)} вопросов)")
+        adapter = make_adapter(tools)
+        try:
+            items += run_all(Agent(llm, adapter), group, progress)
+        finally:
+            adapter.close()
+    return items
 
 
 def run_all(agent: Agent, questions: list[dict], progress=print) -> list[dict]:
@@ -96,7 +119,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=None, help="взять только первые N вопросов")
     parser.add_argument("--ids", default=None, help="id вопросов через запятую")
     parser.add_argument("--note", default="", help="пометка к прогону, например «правка про сценарии»")
-    parser.add_argument("--questions", type=Path, default=QUESTIONS)
+    parser.add_argument("--set", dest="question_set", choices=sorted(SETS), default="demo",
+                        help="demo — демо-витрина, flat — плоские отчёты из data/samples, all — оба набора")
+    parser.add_argument("--questions", type=Path, default=None, help="свой файл с вопросами (вместо --set)")
     parser.add_argument("--results", type=Path, default=RESULTS)
     parser.add_argument("--details-dir", type=Path, default=DETAILS_DIR)
     args = parser.parse_args(argv)
@@ -104,22 +129,29 @@ def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")  # старые кодировки консоли Windows не знают ✓ и Δ
     load_env()
-    os.environ["KPI_DATA_PATH"] = str(datastore.DEFAULT_PATH)  # эталоны посчитаны по демо-витрине
     try:
         llm = make_llm(args.backend)
     except ConfigError as exc:
         print(f"Не удалось создать клиент модели: {exc}", file=sys.stderr)
         return 2
-    questions = load_questions(args.questions, args.ids.split(",") if args.ids else None, args.limit)
+    paths = (args.questions,) if args.questions else SETS[args.question_set]
+    questions = [q for path in paths for q in load_questions(path)]
+    if args.ids:
+        questions = [q for q in questions if q["id"] in args.ids.split(",")]
+    questions = questions[:args.limit] if args.limit else questions
     if not questions:
         print("Нет вопросов для прогона (проверьте --ids и evals/questions.json).", file=sys.stderr)
         return 2
 
-    adapter = make_adapter(args.tools)
-    try:
-        items = run_all(Agent(llm, adapter), questions)
-    finally:
-        adapter.close()
+    with tempfile.TemporaryDirectory() as workdir:
+        saved_env = os.environ.get("KPI_DATA_PATH")
+        try:
+            items = run_grouped(llm, args.tools, questions, Path(workdir))
+        finally:  # переменная нужна только на время прогона
+            if saved_env is None:
+                os.environ.pop("KPI_DATA_PATH", None)
+            else:
+                os.environ["KPI_DATA_PATH"] = saved_env
 
     summary = aggregate(items)
     now = datetime.now(timezone.utc)
@@ -129,14 +161,16 @@ def main(argv: list[str] | None = None) -> int:
         "prompt_version": PROMPT_VERSION,
         "llm": llm.name,
         "tools_backend": (args.tools or os.getenv("TOOLS_BACKEND") or "mcp").lower(),
-        "dataset": datastore.DEFAULT_PATH.name,
+        "dataset": "+".join(dict.fromkeys(datastore.DEFAULT_PATH.name if (q.get("dataset") or datasets.DEMO) == datasets.DEMO
+                                          else q["dataset"] for q in questions)),
         **{k: summary[k] for k in ("n", "errors", "cause_accuracy", "numbers_accuracy", "unverified_share",
                                    "avg_latency_ms", "avg_tokens")},
         "note": args.note,
         "details": str(details_path.relative_to(HERE.parent)) if details_path.is_relative_to(HERE.parent)
         else str(details_path),
     }
-    previous = next((r for r in reversed(read_rows(args.results)) if r["llm"] == row["llm"]), None)
+    previous = next((r for r in reversed(read_rows(args.results))
+                     if r["llm"] == row["llm"] and r.get("dataset") == row["dataset"]), None)
     args.details_dir.mkdir(parents=True, exist_ok=True)
     details_path.write_text(json.dumps({"run": row, "summary": summary, "items": items}, ensure_ascii=False,
                                        indent=2), "utf-8")

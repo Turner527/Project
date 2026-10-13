@@ -16,13 +16,25 @@ _MINUS = "−"
 
 
 def _fmt(x, signed: bool = False) -> str:
-    """Число в русской записи с теми же цифрами, что в результате инструмента (знак — для наглядности)."""
+    """Число в русской записи с теми же цифрами, что в результате инструмента (знак — для наглядности).
+    Крупные числа разбиваются на разряды неразрывным пробелом: «2 819 730»."""
     if x is None:
         return "н/д"
-    text = str(abs(x)).replace(".", ",")
+    a = abs(x)
+    if float(a).is_integer() and a >= 1000:
+        text = f"{int(a):,}".replace(",", "\u00a0")
+    else:
+        whole, _, frac = str(a).partition(".")
+        whole = f"{int(whole):,}".replace(",", "\u00a0") if len(whole) > 4 else whole
+        text = whole + ("," + frac if frac else "")
     if x < 0:
         return f"{_MINUS}{text}"
     return f"+{text}" if signed and x > 0 else text
+
+
+def _u(unit: str) -> str:
+    """Единица с пробелом перед ней («5 мин»), проценты слитно («9,06%»), без единицы — пустая строка."""
+    return "" if not unit else unit if unit == "%" else f" {unit}"
 
 
 def _n(word: str) -> int:
@@ -134,19 +146,31 @@ class ScriptedLLM:
         period, base = d["period"], d["baseline"]
         scope = "".join(f" ({k} = «{v}»)" for k, v in (d.get("filter") or {}).items())
         span = f" за {period['from']}–{period['to']}" if period.get("from") else ""
-        head = (f"{metric}{scope}{span}: факт {_fmt(dev['fact'])} {unit}; база ({base['label']}) {_fmt(dev['base'])} {unit}; "
-                f"изменение {_fmt(dev['deviation_abs'], True)} {unit} ({_fmt(dev['deviation_pct'], True)}%) — "
+        head = (f"{metric}{scope}{span}: факт {_fmt(dev['fact'])}{_u(unit)}; база ({base['label']}) {_fmt(dev['base'])}{_u(unit)}; "
+                f"изменение {_fmt(dev['deviation_abs'], True)}{_u(unit)} ({_fmt(dev['deviation_pct'], True)}%) — "
                 f"{dev['assessment']}.")
+        local = d.get("local_deviations") or []
+        local_text = ""
+        if local:  # итог в норме или лучше базы, но внутри есть заметные ухудшения
+            items = "; ".join(f"{_dim(x['dimension'])} «{x['value']}»: {_fmt(x['change_pct'], True)}% к базе "
+                              f"(влияние на итог {_fmt(x['effect_on_total_pct'], True)}%)" for x in local)
+            local_text = f" Внутри есть заметные ухудшения: {items}."
         if not dev["significant"]:
+            checks = ["Убедиться, что база сравнения (план или период) выбрана верно."]
+            if local:
+                names = ", ".join(f"«{x['value']}»" for x in local)
+                checks.insert(0, f"Проверить, что происходит со значениями {names}: условия, качество данных, сбои.")
+                checks.append("Решить, нужно ли разбирать эти значения отдельно: итог их ухудшение пока не показывает.")
             return {
-                "diagnosis": {"summary": f"{head} Значимого изменения нет, искать причины не нужно.",
-                              "root_cause": "Значимого изменения нет", "key_segments": []},
+                "diagnosis": {"summary": f"{head} Значимого изменения нет, искать причины итога не нужно.{local_text}",
+                              "root_cause": "Итог в норме, но есть локальные ухудшения" if local else "Значимого изменения нет",
+                              "key_segments": list(dict.fromkeys(x["value"] for x in local))},
                 "scenarios": [],
-                "manual_checks": ["Убедиться, что база сравнения (план или период) выбрана верно."],
+                "manual_checks": checks,
                 "used_tool_calls": ids,
             }
 
-        sentences = [head]
+        sentences = [head + local_text]
         key_values: list[str] = []
         top_value = dim_name = None
         primary = next((x for x in d["dimensions"] if x["dimension"] == d["primary_dimension"]), None)
@@ -187,8 +211,8 @@ class ScriptedLLM:
                 "name": title,
                 "description": "Адресные меры по этому значению до возврата к уровню базы; конкретный набор мер "
                                "определяет владелец показателя.",
-                "effect_estimate": f"Эффект {_fmt(s['effect_abs'])} {s['unit']}: закрывает {_fmt(s['gap_closed_pct'])}% "
-                                   f"изменения, остаток {_fmt(s['remaining_gap_abs'])} {s['unit']}.",
+                "effect_estimate": f"Эффект {_fmt(s['effect_abs'])}{_u(s['unit'])}: закрывает {_fmt(s['gap_closed_pct'])}% "
+                                   f"изменения, остаток {_fmt(s['remaining_gap_abs'])}{_u(s['unit'])}.",
                 "assumptions": ["Эффект — арифметика возврата значения к базе, а не прогноз результата мер.",
                                 "Причина изменения подтверждена владельцем показателя."],
             })

@@ -3,6 +3,7 @@
 Всё эвристики по названиям и значениям, без модели: результат пользователь проверяет и правит в интерфейсе
 («Проверьте роли и типы столбцов»), а подтверждённая спецификация сохраняется как есть.
 """
+import datetime
 import re
 
 import pandas as pd
@@ -14,6 +15,7 @@ from data.validation import WorkbookError
 from tools.text import stems
 
 MAX_DIMENSION_VALUES = 500
+MAX_FILTER_VALUES = 40
 SAMPLE = 5000
 PLAN_WORDS = ("план", "plan", "бюджет", "budget", "target")
 DATE_HINTS = ("дата", "date", "период", "period", "месяц", "month", "день", "day", "неделя", "week")
@@ -99,7 +101,9 @@ def _kind_of(series: pd.Series) -> str:
 def _examples(series: pd.Series, n: int = 3) -> list[str]:
     out = []
     for v in series[~series.map(is_empty)].drop_duplicates().iloc[:n]:
-        out.append(str(v.date()) if isinstance(v, pd.Timestamp) else str(v))
+        if isinstance(v, (pd.Timestamp, datetime.datetime)):  # openpyxl отдаёт даты как datetime
+            v = v.date()
+        out.append(str(v))
     return out
 
 
@@ -115,9 +119,22 @@ def _column_stats(name: str, series: pd.Series, fmt: str) -> dict:
     return info
 
 
+def _fill_defaults(c: dict, cur_unit: str) -> bool:
+    """Название, единица, множитель, способ агрегации и «что лучше» для числового столбца. Возвращает, доля ли это."""
+    name, unit = split_unit(c["name"])
+    fmt_unit, scale = _unit_from_format(c["format"])
+    unit = unit or fmt_unit or (cur_unit if any(w in c["name"].lower() for w in MONEY_WORDS) else "")
+    # проценты и доли суммировать нельзя: берём среднее (точнее — задать отношение двух столбцов)
+    rate = unit == "%" or any(w in c["name"].lower() for w in RATE_WORDS)
+    if rate and scale == 1.0 and c["max"] <= 1.0:  # значения-доли без процентного формата показываем в процентах
+        scale, unit = 100.0, "%"
+    c.update(unit=unit, scale=scale, agg="mean" if rate else "sum", better=better_by_name(c["name"]), display=name)
+    return rate
+
+
 def _plan_base(name: str) -> set[str]:
     plan_stems = {w[:4] for w in PLAN_WORDS}
-    return {s for s in stems(name) if s not in plan_stems}
+    return {s for s in stems(name, stop=False) if s not in plan_stems}
 
 
 def _is_plan_name(name: str) -> bool:
@@ -131,8 +148,8 @@ def _pair_plans(metric_cols: list[dict], plan_cols: list[dict]) -> dict[str, str
         base = _plan_base(p["name"])
         if not base:
             continue
-        best = max(((len(base & stems(m["name"])) / len(base | stems(m["name"])), m["name"]) for m in metric_cols
-                    if stems(m["name"])), default=(0, ""))
+        best = max(((len(base & stems(m["name"], stop=False)) / len(base | stems(m["name"], stop=False)), m["name"])
+                    for m in metric_cols if stems(m["name"], stop=False)), default=(0, ""))
         if best[0] >= 0.5:
             pairs[p["name"]] = best[1]
     return pairs
@@ -193,6 +210,8 @@ def profile(raw: RawFile, sheet: str | None = None) -> dict:
             c["reason"] = "столбец пуст"
         elif c["kind"] == "text":
             values = [str(v) for v in df[c["name"]].dropna().astype(str).unique()]
+            if len(values) <= MAX_FILTER_VALUES:
+                c["values"] = sorted(values)  # интерфейс предложит их как значения фильтра, если пользователь выберет эту роль
             if c["n_unique"] <= 1:
                 c.update(role="ignore", reason=f"одно и то же значение ({c['examples'][0] if c['examples'] else '—'})")
                 if any(h in c["name"].lower() for h in CURRENCY_HINTS) and values:
@@ -245,28 +264,22 @@ def profile(raw: RawFile, sheet: str | None = None) -> dict:
                      if CURRENCY_SYMBOL.get(v.strip().lower())), "")
     metrics: list[Metric] = []
     for c in cols:
+        if c["kind"] != "number":
+            continue
+        # настройки показателя есть у каждого числового столбца: интерфейс подставляет их, если пользователь сменит роль
+        rate = _fill_defaults(c, cur_unit)
         if c["role"] != "metric":
             continue
-        name, unit = split_unit(c["name"])
-        fmt_unit, scale = _unit_from_format(c["format"])
-        unit = unit or fmt_unit or (cur_unit if any(w in c["name"].lower() for w in MONEY_WORDS) else "")
-        # доли из процентного формата Excel показываем в процентах
-        # проценты и доли суммировать нельзя: берём среднее (точнее — задать отношение двух столбцов)
-        rate = unit == "%" or any(w in c["name"].lower() for w in RATE_WORDS)
-        agg = "mean" if rate else "sum"
-        if rate and scale == 1.0 and c["max"] <= 1.0:  # значения-доли без процентного формата показываем в процентах
-            scale, unit = 100.0, "%"
         if rate:
             warnings.append(f"«{c['name']}» — это доля или процент: берётся простое среднее по строкам. Если известны "
                             "числитель и знаменатель, точнее задать отношение двух столбцов.")
-        c.update(unit=unit, scale=scale, agg=agg, better=better_by_name(c["name"]), display=name)
-        metrics.append(Metric(name=name, kind=agg, column=c["name"], unit=unit, better=c["better"], scale=scale,
-                              plan_column=next((p["name"] for p in cols if p.get("plan_for") == c["name"]), None)))
+        metrics.append(Metric(name=c["display"], kind=c["agg"], column=c["name"], unit=c["unit"], better=c["better"],
+                              scale=c["scale"], plan_column=next((p["name"] for p in cols if p.get("plan_for") == c["name"]), None)))
     names = [m.name for m in metrics]
     for dup in {n for n in names if names.count(n) > 1}:  # «Расходы, руб» и «Расходы, шт» -> оставляем исходные названия
         for m in metrics:
             if m.name == dup:
-                m.name = m.column
+                m.name = by_name[m.column]["display"] = m.column
     ratios = _suggest_ratios(metrics)
 
     filters = [{"column": c["name"], "values": c["keep"]} for c in cols if c["role"] == "filter"]

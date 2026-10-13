@@ -518,3 +518,49 @@ def test_every_tool_is_json_safe_and_compact_on_flat_reports(sample_fixture, req
             text = json.dumps(result, ensure_ascii=False, allow_nan=False)
             assert "error" not in result, (name, result)
             assert len(text) < 9000 and longest_list(result) <= 10, (name, len(text))
+
+
+def test_the_more_specific_metric_wins_when_both_names_are_mentioned(marketing):
+    """Регрессия с живого прогона: «Стоимость заказа» не должна уступать «Заказам» из-за равной оценки."""
+    hits = core.find_metrics("Что изменилось с показателем «Стоимость заказа» за последний период и почему?")["metric_matches"]
+    assert hits[0]["metric"] == "Стоимость заказа" and hits[0]["match_score"] == 1.0
+    assert "Заказы" in [h["metric"] for h in hits]  # короткое название остаётся в списке, но после точного
+    assert core.find_metrics("почему упали заказы")["metric_matches"][0]["metric"] == "Заказы"
+    assert core.find_metrics("конверсия лидов в заказы")["metric_matches"][0]["metric"] == "Конверсия лидов в заказы"
+
+
+def test_generic_words_do_not_hide_metrics_whose_names_look_like_them(marketing):
+    """«Показы» начинаются как «показатель», «Стоимость» — как «стоит»: это названия, а не служебные слова."""
+    assert core.find_metrics("как изменились показы")["metric_matches"][0]["metric"] == "Показы"
+    assert core.find_metrics("что с показами по каналам")["metric_matches"][0]["metric"] == "Показы"
+    assert core.find_metrics("Стоимость лида")["metric_matches"][0]["metric"] == "Стоимость лида"
+    generic = core.find_metrics("покажи все показатели")
+    assert generic["metric_matches"] == [] and "note" in generic  # служебные слова совпадений не дают
+
+
+# ---------- скрытые проблемы при нормальном итоге ----------
+
+
+def test_flat_total_still_shows_where_a_value_has_collapsed(branches):
+    res = core.diagnose_change("Конверсия сделок")
+    assert not res["deviation"]["significant"]  # итог по сети в пределах допуска
+    found = res["local_deviations"]
+    assert [(x["dimension"], x["value"]) for x in found] == [("Отделение", "Москва Север"), ("Отделение", "Екатеринбург")]
+    assert all(x["change_pct"] < -10 and x["effect_on_total_pct"] < 0 and x["base_weight_pct"] >= 2 for x in found)
+    assert "повод проверить" in res["local_note"] and res["recovery_scenarios"] == []
+    margin = core.diagnose_change("Маржа")  # расходы Новосибирска просадили маржу отделения, а сети в целом — почти нет
+    assert [x["value"] for x in margin["local_deviations"]] == ["Новосибирск"]
+    json.dumps(res, allow_nan=False)
+
+
+def test_no_local_deviations_when_there_is_nothing_to_find(marketing, branches):
+    assert "local_deviations" not in core.diagnose_change("Доход")  # итог в норме и внутри тоже
+    assert "local_deviations" not in core.diagnose_change("Расходы")  # итог сам значимо плох: его объясняет разбор вкладов
+
+
+def test_strategic_controls_have_no_local_deviations_but_the_portfolio_shows_its_young_borrowers():
+    for kpi in generate.CONTROL_KPIS:
+        assert "local_deviations" not in core.diagnose_change(kpi), kpi
+    portfolio = core.diagnose_change("Розничный кредитный портфель")  # итог −2% (в пределах допуска), «Молодёжь» просела
+    assert not portfolio["deviation"]["significant"]
+    assert portfolio["local_deviations"][0]["value"] == "Молодёжь" and portfolio["local_deviations"][0]["change_pct"] < -10

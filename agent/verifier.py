@@ -4,6 +4,8 @@
 округление, как оно записано в ответе: «86,7» допускает отклонение 0,05, «87» — 0,5. Знак игнорируется.
 Что НЕ проверяется: что число относится именно к тому показателю, о котором сказано в тексте.
 Не считаются числами: даты и годы, call_id, метки вида S1/30+, целые до 12 без единицы («3 сценария»).
+Запись с множителем («2,8 млн», «450 тыс.») сверяется и как есть (данные могут быть уже в миллионах), и в пересчёте
+на единицы («2 800 000»); допуск при пересчёте — половина последнего записанного разряда в тех же единицах.
 """
 import re
 from dataclasses import dataclass, field
@@ -20,6 +22,8 @@ _NUMBER = re.compile(
     r"(?P<num>\d{1,3}(?:[   ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)"
 )
 _UNIT_AFTER = re.compile(r"^\s?(?:%|п\.\s?п\.|пп\b|процент|млрд|млн|тыс|пункт|мин\b|₽|руб|раз\b)", re.I)
+_MULTIPLIER = re.compile(r"^\s?(тыс|млн|млрд|трлн)", re.I)
+_MULTIPLIER_VALUE = {"тыс": 1e3, "млн": 1e6, "млрд": 1e9, "трлн": 1e12}
 _TRIVIAL_MAX = 12  # целые до 12 без единицы — счёт, нумерация, месяцы
 MAX_SOURCES_PER_NUMBER = 3
 
@@ -31,6 +35,7 @@ class Num:
     decimals: int
     start: int
     end: int
+    multiplier: float = 1.0  # «тыс» — 1e3, «млн» — 1e6, «млрд» — 1e9
 
 
 @dataclass
@@ -79,14 +84,20 @@ def extract_numbers(text: str, skip_trivial: bool = True) -> list[Num]:
         if skip_trivial and decimals == 0 and not _UNIT_AFTER.match(masked[m.end():]):
             if value <= _TRIVIAL_MAX or 1990 <= value <= 2100:
                 continue
-        out.append(Num(text[m.start("num"):m.end("num")], value, decimals, m.start(), m.end()))
+        suffix = _MULTIPLIER.match(masked[m.end():])
+        multiplier = _MULTIPLIER_VALUE[suffix.group(1).lower()] if suffix else 1.0
+        out.append(Num(text[m.start("num"):m.end("num")], value, decimals, m.start(), m.end(), multiplier))
     return out
 
 
 def numbers_match(written: Num | tuple[float, int], source: float) -> bool:
     """Совпадает ли записанное число с исходным в пределах округления записи."""
     value, decimals = (written.value, written.decimals) if isinstance(written, Num) else written
-    return abs(abs(value) - abs(source)) <= 0.5 * 10 ** (-decimals) + 1e-9
+    multiplier = written.multiplier if isinstance(written, Num) else 1.0
+    tolerance = 0.5 * 10 ** (-decimals) + 1e-9
+    if abs(abs(value) - abs(source)) <= tolerance:
+        return True
+    return multiplier != 1.0 and abs(abs(value) * multiplier - abs(source)) <= tolerance * multiplier
 
 
 def numeric_leaves(obj) -> Iterable[float]:

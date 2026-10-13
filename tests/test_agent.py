@@ -265,3 +265,34 @@ def test_a_fabricated_number_is_caught_on_a_flat_report_too(adapter, tmp_path, m
     memo = memo_json(summary="Расходы выросли на 99,9% за период.")
     result = Agent(FakeLLM([call("get_change", metric="Расходы"), text("ок"), text(memo)]), adapter).run("Что с расходами?")
     assert result.verification.status == STATUS_UNVERIFIED and {u.value for u in result.verification.unverified} == {"99,9"}
+
+
+def test_stub_writes_big_numbers_readably_and_without_stray_spaces(adapter, tmp_path, monkeypatch):
+    activate_flat(tmp_path, monkeypatch, "marketing")
+    result = Agent(ScriptedLLM(), adapter).run("Почему выросли расходы?")
+    summary = result.memo.diagnosis.summary
+    assert "факт 2\u00a0819\u00a0730 руб; база (предыдущий период) 2\u00a0542\u00a0621 руб;" in summary
+    assert " ;" not in summary and " ." not in summary and " :" not in summary
+    assert result.verification.ok  # числа с разрядами верификатор тоже находит в результатах инструментов
+    ratio = Agent(ScriptedLLM(), adapter).run("Почему упала конверсия в лиды?").memo
+    assert "факт 9,06%; база (предыдущий период) 9,84%; изменение −0,77% (−7,8%)" in ratio.diagnosis.summary
+    assert ratio.scenarios[0].effect_estimate.startswith("Эффект 0,79%: закрывает 102,6% изменения")
+
+
+def test_stub_reports_local_deviations_when_the_total_is_fine(adapter, tmp_path, monkeypatch):
+    activate_flat(tmp_path, monkeypatch, "branches")
+    result = Agent(ScriptedLLM(), adapter).run("Что происходит с конверсией сделок?")
+    memo = result.memo
+    assert result.verification.ok and memo.scenarios == []
+    assert memo.diagnosis.root_cause == "Итог в норме, но есть локальные ухудшения"
+    assert memo.diagnosis.key_segments == ["Москва Север", "Екатеринбург"]
+    assert "Значимого изменения нет, искать причины итога не нужно." in memo.diagnosis.summary
+    assert "Внутри есть заметные ухудшения: отделение «Москва Север»: −14,1% к базе (влияние на итог −1,5%)" in memo.diagnosis.summary
+    assert any("«Москва Север»" in c for c in memo.manual_checks)
+
+
+def test_stub_says_nothing_about_locals_for_a_healthy_metric(adapter, tmp_path, monkeypatch):
+    activate_flat(tmp_path, monkeypatch, "branches")
+    memo = Agent(ScriptedLLM(), adapter).run("Выполняется ли план по доходу?").memo
+    assert memo.diagnosis.root_cause == "Значимого изменения нет" and memo.diagnosis.key_segments == []
+    assert "Внутри есть заметные" not in memo.diagnosis.summary

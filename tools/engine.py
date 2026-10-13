@@ -35,6 +35,11 @@ MIN_COVERAGE = 0.9  # доля периодов, которые должны п�
 MIN_SECOND_SHARE = 10.0  # сценарий «два значения» строится, если второе даёт не меньше 10% изменения
 MAX_DRILL_VALUE_SHARE = 40.0  # углубляемся в значение, если оно даёт не меньше 40% изменения
 MAX_SCAN_DIMENSIONS = 6
+# «локальные отклонения»: заметное ухудшение внутри значения измерения при нормальном итоге
+LOCAL_MIN_OWN_PCT = 10.0  # собственное изменение значения, %
+LOCAL_MIN_WEIGHT_PCT = 2.0  # доля значения в базе (в объёме для отношений), %
+LOCAL_MIN_EFFECT_PCT = 0.5  # вклад значения в итог, % от базы итога
+MAX_LOCAL = 3
 
 
 class ToolError(Exception):
@@ -282,7 +287,10 @@ def compare(t: Table, m: Metric, win: Window, base: Baseline, by: str | None = N
         else:
             v1g, v0g = s * g1[m.N], s * g0[m.N]
             contrib = v1g - v0g
-        groups = pd.DataFrame({"v1": v1g, "v0": v0g, "contrib": contrib})
+        # доля значения в базе: в объёме (знаменателе) для отношений, в сумме модулей для сумм
+        total_abs = float(v0g.abs().sum())
+        w0 = g0[m.D] / D0 * 100 if ratio else (v0g.abs() / total_abs * 100 if total_abs else np.nan)
+        groups = pd.DataFrame({"v1": v1g, "v0": v0g, "contrib": contrib, "w0": w0})
         groups["own_pct"] = (groups["v1"] - groups["v0"]) / groups["v0"].abs().replace(0, np.nan) * 100
         groups["share"] = groups["contrib"] / diff * 100 if abs(diff) > 1e-12 else np.nan
         groups = groups[(groups["v1"].fillna(0) != 0) | (groups["v0"].fillna(0) != 0) | (groups["contrib"] != 0)]
@@ -371,8 +379,24 @@ def trailing_run(t: Table, m: Metric, win: Window, base: Baseline, total: Compar
 # ---------- перебор измерений, углубление, сценарии ----------
 
 
+def concentration(contrib: np.ndarray, diff: float) -> float:
+    """Насколько изменение сосредоточено в немногих значениях измерения: индекс Херфиндаля по вкладам в сторону общего
+    изменения, из которого вычтено равномерное распределение (0 — вклад размазан поровну, 1 — всё в одном значении).
+    В отличие от доли главного значения, не завышает измерения из двух-трёх значений: 46% среди трёх — почти норма,
+    44% среди двенадцати — явный всплеск."""
+    k = len(contrib)
+    if k < 2 or not math.isfinite(diff) or abs(diff) < 1e-12:
+        return 0.0
+    push = np.clip(np.nan_to_num(contrib) * (1 if diff > 0 else -1), 0, None)
+    total = float(push.sum())
+    if total <= 0:
+        return 0.0
+    hhi = float(((push / total) ** 2).sum())
+    return (hhi - 1 / k) / (1 - 1 / k)
+
+
 def scan_dimensions(t: Table, m: Metric, win: Window, base: Baseline, where=()) -> list[dict]:
-    """Вклад значений каждого измерения в изменение; измерения упорядочены по концентрации (доле главного значения)."""
+    """Вклад значений каждого измерения в изменение; измерения упорядочены по концентрации изменения в немногих значениях."""
     skip = {d for d, _ in where}
     out = []
     for dim in [d for d in t.dims if d not in skip][:MAX_SCAN_DIMENSIONS]:
@@ -385,9 +409,35 @@ def scan_dimensions(t: Table, m: Metric, win: Window, base: Baseline, where=()) 
         cumulative = np.cumsum(np.nan_to_num(shares))
         n80 = int(np.argmax(cumulative >= 80) + 1) if len(cumulative) and (cumulative >= 80).any() else None
         out.append({"dimension": dim, "values_count": int(len(g)), "top_share_pct": r(top_share, 1),
-                    "values_for_80pct": n80, "top": group_rows(cmp, 3), "_cmp": cmp})
-    out.sort(key=lambda d: (-(d["top_share_pct"] if d["top_share_pct"] is not None else -1e9), d["values_count"]))
+                    "values_for_80pct": n80, "top": group_rows(cmp, 3), "_cmp": cmp,
+                    "_score": concentration(g["contrib"].to_numpy(), cmp.diff)})
+    out.sort(key=lambda d: (-d["_score"], d["values_count"]))
+    for d in out:
+        del d["_score"]
     return out
+
+
+def local_deviations(m: Metric, total: Comparison, scan: list[dict], limit: int = MAX_LOCAL) -> list[dict]:
+    """Заметные ухудшения внутри значений измерений, когда общий итог их не показывает: итог в пределах допуска или
+    лучше базы, а отдельное значение (отделение, канал, очередь) просело на LOCAL_MIN_OWN_PCT и больше. Мелкие значения
+    (доля в базе меньше LOCAL_MIN_WEIGHT_PCT) и значения, почти не двигающие итог, не считаются: это шум."""
+    if m.better == "none" or total.v0 in (None, 0) or (total.significant and total.unfavorable):
+        return []
+    found = []
+    for d in scan:
+        g = d["_cmp"].groups
+        if g is None:
+            continue
+        for value, row in g.iterrows():
+            own, weight = row["own_pct"], row["w0"]
+            effect = abs(row["contrib"]) / abs(total.v0) * 100
+            if (_group_unfavorable(m, row) and math.isfinite(own) and abs(own) >= LOCAL_MIN_OWN_PCT
+                    and math.isfinite(weight) and weight >= LOCAL_MIN_WEIGHT_PCT and effect >= LOCAL_MIN_EFFECT_PCT):
+                found.append({"dimension": d["dimension"], "value": str(value), "base": r(row["v0"]), "fact": r(row["v1"]),
+                              "change_pct": r(own, 1), "base_weight_pct": r(weight, 1),
+                              "effect_on_total_pct": r(row["contrib"] / total.v0 * 100, 1)})
+    found.sort(key=lambda x: -abs(x["effect_on_total_pct"]))
+    return found[:limit]
 
 
 def drill_down(t: Table, m: Metric, win: Window, base: Baseline, where, primary: dict) -> list[dict]:
@@ -595,5 +645,6 @@ def suggest_questions(t: Table) -> list[str]:
 
 
 __all__ = ["ToolError", "Window", "Baseline", "Comparison", "resolve_window", "resolve_baseline", "compare", "r",
-           "group_rows", "trailing_run", "scan_dimensions", "drill_down", "scenarios", "related", "resolve_where",
+           "group_rows", "trailing_run", "scan_dimensions", "local_deviations", "drill_down", "scenarios", "related",
+           "resolve_where",
            "find_metric", "top_findings", "suggest_questions"]

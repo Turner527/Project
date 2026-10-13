@@ -325,3 +325,115 @@ def test_contributions_always_add_up_to_the_total_change(seed):
                 assert cmp.groups["contrib"].sum() == pytest.approx(cmp.diff, rel=1e-9, abs=1e-9), (name, kind, dim)
                 if abs(cmp.diff) > 1e-9:
                     assert cmp.groups["share"].sum() == pytest.approx(100.0, abs=1e-6)
+
+
+# ---------- какое измерение главное ----------
+
+
+def rank_one_table():
+    """Изменение разложено «по таблице умножения»: у «Продукта» (3 значения) главное значение даёт 46%, у «Отделения»
+    (12 значений) — 44%, но 46% среди трёх почти норма, а 44% среди двенадцати — явный всплеск."""
+    a = {"Карты": 46, "Кредиты": 34, "Сбережения": 20}
+    b = {"Новосибирск": 44, **{f"Отд {i}": 5 for i in range(1, 12)}}
+    rows = []
+    for month, scale in (("2026-01", 0.0), ("2026-02", 1.0)):
+        for pa, wa in a.items():
+            for pb, wb in b.items():
+                rows.append((month, pa, pb, 1000 + scale * wa * wb / 100))
+    metrics = [{"name": "Расходы", "kind": "sum", "column": "Значение", "better": "down"}]
+    return table_from(rows, ["Месяц", "Продукт", "Отделение", "Значение"],
+                      dict(date="Месяц", dimensions=["Продукт", "Отделение"], metrics=metrics))
+
+
+def test_concentration_is_zero_for_even_spread_and_one_for_a_single_driver():
+    even = np.array([10.0, 10.0, 10.0, 10.0])
+    assert E.concentration(even, 40.0) == pytest.approx(0)
+    assert E.concentration(np.array([40.0, 0.0, 0.0, 0.0]), 40.0) == pytest.approx(1)
+    assert E.concentration(np.array([50.0, -10.0, 0.0]), 40.0) == pytest.approx(1)  # противоположное движение не в счёт
+    assert E.concentration(np.array([5.0]), 5.0) == 0 and E.concentration(even, 0.0) == 0
+    assert E.concentration(np.array([-30.0, -10.0]), -40.0) > E.concentration(np.array([-20.0, -20.0]), -40.0)
+
+
+def test_the_dimension_with_a_real_outlier_beats_the_one_with_a_bigger_top_share():
+    t = rank_one_table()
+    m = t.metric("Расходы")
+    win, _ = E.resolve_window(t, period_from="2026-02", period_to="2026-02")
+    scan = E.scan_dimensions(t, m, win, E.resolve_baseline(t, m, win, "prev"))
+    by_dim = {d["dimension"]: d for d in scan}
+    assert by_dim["Продукт"]["top_share_pct"] > by_dim["Отделение"]["top_share_pct"]  # по голой доле выиграл бы «Продукт»
+    assert [d["dimension"] for d in scan] == ["Отделение", "Продукт"]
+    assert by_dim["Отделение"]["top"][0]["value"] == "Новосибирск"
+
+
+# ---------- локальные отклонения при нормальном итоге ----------
+
+
+def pockets_table(better="up", extra=()):
+    """Итог не меняется (400 -> 400), но А просел на 30%, а Б вырос на 30%. extra — дополнительные (значение, база, факт)."""
+    rows = [("2026-01", "А", 100), ("2026-02", "А", 70), ("2026-01", "Б", 100), ("2026-02", "Б", 130),
+            ("2026-01", "В", 100), ("2026-02", "В", 100), ("2026-01", "Г", 100), ("2026-02", "Г", 100)]
+    for value, base, fact in extra:
+        rows += [("2026-01", value, base), ("2026-02", value, fact)]
+    metrics = [{"name": "Показатель", "kind": "sum", "column": "Значение", "better": better}]
+    return monthly(rows, metrics)
+
+
+def local_for(t, **window):
+    m = t.metric("Показатель")
+    win, _ = E.resolve_window(t, period_from="2026-02", period_to="2026-02")
+    base = E.resolve_baseline(t, m, win, "prev")
+    total = E.compare(t, m, win, base)
+    return total, E.local_deviations(m, total, E.scan_dimensions(t, m, win, base))
+
+
+def test_a_flat_total_still_reveals_a_collapsed_value():
+    total, found = local_for(pockets_table())
+    assert total.diff == 0 and not total.significant
+    assert found == [{"dimension": "Сегмент", "value": "А", "base": 100.0, "fact": 70.0, "change_pct": -30.0,
+                      "base_weight_pct": 25.0, "effect_on_total_pct": -7.5}]  # «Б» выросла — это не ухудшение
+
+
+def test_direction_decides_which_side_is_a_problem():
+    _, found = local_for(pockets_table(better="down"))
+    assert [x["value"] for x in found] == ["Б"] and found[0]["change_pct"] == 30.0  # для «меньше — лучше» плохо рост
+    _, neutral = local_for(pockets_table(better="none"))
+    assert neutral == []
+
+
+def test_small_values_and_small_moves_are_not_reported():
+    # тонкая доля (0,04% базы); −9% (меньше порога 10%); крупное, но всего −6%; «Я» выравнивает итог
+    extra = [("Д", 1, 0.2), ("Е", 100, 91), ("Ж", 1000, 940), ("Я", 1000, 1070)]
+    total, found = local_for(pockets_table(extra=extra))
+    assert not total.significant and [x["value"] for x in found] == ["А"]
+    # крупное значение с заметным падением попадает в список и ранжируется по влиянию на итог
+    total, big = local_for(pockets_table(extra=[("Ж", 1000, 850), ("Я", 1000, 1150)]))
+    assert not total.significant and [x["value"] for x in big] == ["Ж", "А"] and big[0]["change_pct"] == -15.0
+
+
+def test_no_local_list_when_the_total_itself_is_the_problem_and_the_list_is_capped():
+    t = monthly([("2026-01", "А", 100), ("2026-02", "А", 50), ("2026-01", "Б", 100), ("2026-02", "Б", 100)],
+                [{"name": "Показатель", "kind": "sum", "column": "Значение", "better": "up"}])
+    m = t.metric("Показатель")
+    win, _ = E.resolve_window(t, period_from="2026-02", period_to="2026-02")
+    base = E.resolve_baseline(t, m, win, "prev")
+    total = E.compare(t, m, win, base)
+    assert total.significant and total.unfavorable
+    assert E.local_deviations(m, total, E.scan_dimensions(t, m, win, base)) == []  # разбор вкладов уже объясняет итог
+    many = [(f"З{i}", 100, 80 - i) for i in range(6)] + [("Я", 1000, 1135)]  # шесть просевших значений, итог ровный
+    total, found = local_for(pockets_table(extra=many))
+    assert not total.significant and len(found) == E.MAX_LOCAL
+
+
+def test_local_deviations_work_for_ratios_and_use_the_volume_weight():
+    rows = [("2026-01", "А", 20, 100), ("2026-02", "А", 12, 100), ("2026-01", "Б", 20, 100), ("2026-02", "Б", 28, 100),
+            ("2026-01", "В", 20, 100), ("2026-02", "В", 20, 100)]
+    metrics = [{"name": "Конверсия", "kind": "ratio", "num": "Сделки", "den": "Обращения", "scale": 100.0, "better": "up"}]
+    t = table_from(rows, ["Месяц", "Отдел", "Сделки", "Обращения"], dict(date="Месяц", dimensions=["Отдел"], metrics=metrics))
+    m = t.metric("Конверсия")
+    win, _ = E.resolve_window(t, period_from="2026-02", period_to="2026-02")
+    base = E.resolve_baseline(t, m, win, "prev")
+    total = E.compare(t, m, win, base)
+    assert total.diff == 0
+    (found,) = E.local_deviations(m, total, E.scan_dimensions(t, m, win, base))
+    assert (found["value"], found["change_pct"], found["base_weight_pct"]) == ("А", -40.0, 33.3)
+    assert found["effect_on_total_pct"] == pytest.approx(-13.3, abs=0.05)

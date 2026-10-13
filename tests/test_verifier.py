@@ -114,3 +114,38 @@ def test_nested_json_numbers_and_bools():
     calls = [rec("c_1", {"a": {"b": [{"c": 42.5}]}, "flag": True, "count": 1})]
     assert verify({"x": "значение 42,5 млн"}, calls).ok
     assert not verify({"x": "значение 100 млн"}, calls).ok  # True не превращается в 1, а 100 не найдено
+
+
+# ---------- множители: «2,8 млн» и «450 тыс.» ----------
+
+
+def test_multiplier_words_are_recognised():
+    nums = extract_numbers("расходы 2,8 млн руб., выручка 450 тыс. и 3 млрд ₽, рост 5%")
+    assert [(n.value, n.multiplier) for n in nums] == [(2.8, 1e6), (450.0, 1e3), (3.0, 1e9), (5.0, 1.0)]
+
+
+@pytest.mark.parametrize("text, source, ok", [
+    ("расходы 2,8 млн руб.", 2_819_730.0, True),    # 2,8 млн = 2 800 000 ± 50 000
+    ("расходы 2,9 млн руб.", 2_819_730.0, False),
+    ("выручка 450 тыс.", 449_800.0, True),
+    ("выручка 450 тыс.", 452_000.0, False),         # точность записи — тысячи: допуск ±500
+    ("выручка 288 млрд ₽", 288.0, True),             # данные уже в миллиардах: сверяется и как есть
+    ("выручка 288 млрд ₽", 288_000_000_000.0, True),
+    ("разница 3 млн", 3.4e6, True),                  # без десятичных допуск — полмиллиона: 3,4 млн округляется до 3 млн
+    ("разница 3 млн", 3.6e6, False),
+])
+def test_multiplier_tolerance_is_half_of_the_written_digit(text, source, ok):
+    (num,) = extract_numbers(text, skip_trivial=False)
+    assert numbers_match(num, source) is ok
+
+
+def test_verify_accepts_a_rounded_amount_written_with_a_multiplier():
+    calls = [rec("c_1", {"fact": 2819730.0, "base": 2542621.0})]
+    good = verify({"summary": "Расходы выросли до 2,8 млн руб. с 2,5 млн."}, calls)
+    assert good.status == STATUS_OK and good.checked == 2
+    bad = verify({"summary": "Расходы выросли до 3,8 млн руб."}, calls)
+    assert bad.status == STATUS_UNVERIFIED and [u.value for u in bad.unverified] == ["3,8"]
+
+
+def test_grouped_numbers_with_non_breaking_spaces_are_whole_numbers():
+    assert values("расходы 2\u00a0819\u00a0730 руб., 12\u202f345 шт.") == [(2819730.0, 0), (12345.0, 0)]

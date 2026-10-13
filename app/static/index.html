@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI-аналитик стратегического менеджмента</title>
+<title>AI-аналитик отчётов</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='11' fill='%2321a038'/%3E%3Cpath d='M11 26l6-7 5 4 7-9' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
   /* ---------- темы: тёмно-зелёная по умолчанию, светлая по переключателю ---------- */
@@ -50,6 +50,7 @@
   svg.i { width: 1.15em; height: 1.15em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   .hidden { display: none !important; }
   :focus-visible { outline: 2px solid var(--brand-2); outline-offset: 2px; }
+  input[type=checkbox] { accent-color: var(--brand); width: 17px; height: 17px; }
 
   /* ---------- шапка ---------- */
   header.top { position: sticky; top: 0; z-index: 20; background: var(--header-bg); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid transparent; }
@@ -160,7 +161,8 @@
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 4px 0 8px; }
   .tile { padding: 16px 18px; border-radius: 18px; background: var(--surface-2); border: 1px solid var(--line); }
   .tile .lbl { min-height: 2.6em; font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
-  .tile .val { margin: 6px 0 2px; font-size: 27px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; overflow-wrap: anywhere; }
+  .tile .val { margin: 6px 0 2px; font-size: 27px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; overflow-wrap: break-word; }
+  .tile .val.sm { font-size: 19px; line-height: 1.25; }
   .tile .val.neg { color: var(--bad); } .tile .val.pos { color: var(--good); }
   .tile .cap { font-size: 13px; color: var(--muted); }
   .kpis-src { font-size: 12px; color: var(--faint); margin: 2px 2px 0; }
@@ -226,6 +228,51 @@
   .connect-form input, .connect-form select { font: inherit; font-size: 15px; color: var(--ink); background: var(--composer-bg); border: 1px solid var(--line-strong); border-radius: 13px; padding: 10px 14px; }
   .connect-form small { color: var(--faint); font-size: 12.5px; }
 
+
+  /* ---------- проверка ролей столбцов ---------- */
+  .dialog.wide { max-width: 1180px; padding: 26px 28px; }
+  .review-meta { margin: 0 0 12px; color: var(--muted); font-size: 14.5px; }
+  .review-tools { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; margin: 0 0 12px; }
+  .review select, .review input[type=text], .review input[type=number] { font: inherit; font-size: 14px; color: var(--ink); background: var(--composer-bg); border: 1px solid var(--line-strong); border-radius: 11px; padding: 7px 10px; max-width: 100%; min-width: 0; }
+  .review select:focus-visible, .review input:focus-visible { outline-offset: 0; }
+  .review .cols, .review .ratios { border: 1px solid var(--line); border-radius: 18px; overflow: hidden; margin: 8px 0 18px; }
+  .col-row { display: grid; grid-template-columns: minmax(150px, .9fr) 160px minmax(0, 2.7fr); gap: 10px 16px; padding: 12px 16px; align-items: start; border-top: 1px solid var(--line); }
+  .col-row.head, .ratio-row.head { border-top: 0; background: var(--surface-2); font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); padding-top: 10px; padding-bottom: 10px; }
+  .col-row.off { opacity: .6; }
+  .col-name b { display: block; overflow-wrap: anywhere; }
+  .col-name small { display: block; color: var(--faint); font-size: 12.5px; overflow-wrap: anywhere; margin-top: 2px; }
+  select.role { width: 100%; font-weight: 600; }
+  select.role[data-role="metric"] { border-color: var(--brand-2); }
+  select.role[data-role="date"], select.role[data-role="plan"] { border-color: var(--warn-line); }
+  select.role[data-role="dimension"] { border-color: var(--soft-line); }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: flex-end; }
+  .opts label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+  .opts .w-name { width: 170px; } .opts .w-unit { width: 86px; }
+  .opts .reason { color: var(--faint); font-size: 13px; align-self: center; }
+  .opts .tag { font-size: 12.5px; color: var(--on-soft); background: var(--soft); border: 1px solid var(--soft-line); border-radius: 999px; padding: 2px 10px; align-self: center; }
+  .keep { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .keep label { display: inline-flex; flex-direction: row; gap: 7px; align-items: center; font-size: 14px; color: var(--ink); }
+  .ratio-row { display: grid; grid-template-columns: 26px minmax(150px, 1fr) minmax(190px, 1.5fr) 88px 190px; gap: 10px 14px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .ratio-row .formula { color: var(--muted); font-size: 13.5px; overflow-wrap: anywhere; }
+  .ratio-row.off .formula, .ratio-row.off input[type=text] { opacity: .55; }
+  .ratio-add { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: flex-end; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--surface-2); }
+  .ratio-add label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+  .review h4 { margin: 18px 0 4px; font-size: 17px; }
+  .review .hint2 { margin: 0 0 6px; color: var(--muted); font-size: 13.5px; }
+  .review details { margin: 10px 0; }
+  .review details ul { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
+  .dialog .actions.split { justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .dialog .actions .group { display: flex; gap: 10px; flex-wrap: wrap; }
+  .qlist { display: grid; gap: 8px; margin: 10px 0 4px; }
+  .qlist button { text-align: left; font: inherit; font-size: 14.5px; color: var(--on-soft); background: var(--soft); border: 1px solid var(--soft-line); border-radius: 14px; padding: 9px 14px; cursor: pointer; }
+  .qlist button:hover { border-color: var(--brand-2); }
+  .scenario-card.q h4 { font-size: 18px; }
+  @media (max-width: 800px) {
+    .col-row, .ratio-row { grid-template-columns: minmax(0, 1fr); }
+    .col-row.head, .ratio-row.head { display: none; }
+    .opts .w-name { width: 100%; }
+  }
+
   /* ---------- адаптив ---------- */
   @media (max-width: 960px) {
     .hero { grid-template-columns: minmax(0, 1fr); gap: 36px; padding-top: 32px; }
@@ -262,15 +309,15 @@
         <path d="M11 26l6-7 5 4 7-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
         <circle cx="29" cy="14" r="2.4" fill="#fff"/>
       </svg>
-      <span><b>AI-аналитик</b><small>Стратегический менеджмент</small></span>
+      <span><b>AI-аналитик</b><small>Анализ отчётов и KPI</small></span>
     </button>
     <button class="nav-link" id="how-btn" type="button">Как это работает</button>
     <span class="spacer"></span>
     <button class="btn sm hidden" id="restart-btn" type="button"><span data-icon="refresh"></span><span class="lbl">Новый разговор</span></button>
-    <button class="btn" id="upload-btn" type="button" title="Загрузить свою витрину данных"><span data-icon="upload"></span><span>Загрузить xlsx</span></button>
+    <button class="btn" id="upload-btn" type="button" title="Загрузить отчёт: xlsx или csv"><span data-icon="upload"></span><span>Загрузить отчёт</span></button>
     <button class="btn" id="llm-btn" type="button" aria-label="Подключение к GigaChat"><span class="dot" id="llm-dot"></span><span data-icon="link"></span><span class="txt" id="llm-txt">Подключить GigaChat</span></button>
     <button class="btn icon" id="theme-btn" type="button" aria-label="Переключить тему"></button>
-    <input id="file" type="file" accept=".xlsx" hidden>
+    <input id="file" type="file" accept=".xlsx,.csv" hidden>
   </div>
 </header>
 
@@ -279,16 +326,17 @@
     <div>
       <span class="eyebrow">Ваше пространство аналитики</span>
       <h1 class="display">От отклонения<br>к ясным<br><span class="grad">решениям</span><span data-icon="sparkles"></span></h1>
-      <p class="lead">Спросите, почему цель отстаёт. Агент найдёт причины в данных, проверит связанные KPI и подготовит записку: диагноз, сценарии и что проверить вручную.</p>
+      <p class="lead">Загрузите отчёт из Excel или CSV и спросите, что в нём изменилось и почему. Агент найдёт, где именно, проверит связанные показатели и подготовит записку: диагноз, сценарии и что проверить вручную.</p>
       <div class="trust">
         <span><span data-icon="shield"></span>Все числа считает код</span>
         <span><span data-icon="sparkles"></span>AI с GigaChat</span>
+        <span><span data-icon="lock"></span>Файл остаётся у вас</span>
       </div>
       <div class="card glance" id="glance">
         <header><span><span data-icon="layers"></span>Взгляд на данные</span><span class="pill" id="glance-src">…</span></header>
         <div class="big" id="glance-big">…</div>
         <p id="glance-sub">&nbsp;</p>
-        <footer><span id="glance-mode">&nbsp;</span><span>Источники каждого вывода доступны</span></footer>
+        <footer><span id="glance-mode">&nbsp;</span><span id="glance-action"><span>Источники каждого вывода доступны</span></span></footer>
       </div>
     </div>
 
@@ -296,7 +344,7 @@
       <div class="pad">
         <div class="row"><span class="eyebrow plain muted">Начните с вопроса</span><span class="pill" id="panel-pill">…</span></div>
         <h2>Что вы хотите понять?</h2>
-        <p class="sub">Назовите цель или KPI и, если нужно, период — своими словами.</p>
+        <p class="sub">Назовите показатель, значение разреза или цель и, если нужно, период — своими словами.</p>
         <div id="form-slot">
           <form id="form" autocomplete="off">
             <div class="composer">
@@ -311,23 +359,23 @@
       <div class="foot">
         <div class="dropzone" id="dropzone">
           <div class="ico-box"><span data-icon="file"></span></div>
-          <div><b>Своя витрина данных?</b><small>Перетащите xlsx с листами goals, facts, links</small></div>
+          <div><b>Свой отчёт?</b><small>Перетащите xlsx или csv: любая таблица с числами, датой и разрезами</small></div>
           <button class="btn sm" id="upload-btn-2" type="button"><span data-icon="upload"></span>Выбрать файл</button>
         </div>
-        <div class="note"><span data-icon="lock"></span><span>Файл проверяется и хранится на вашем сервере. В GigaChat уходят только вопрос и результаты расчётов.</span></div>
+        <div class="note"><span data-icon="lock"></span><span>Файл хранится только на этом компьютере. В GigaChat уходят вопрос, названия показателей и разрезов и результаты расчётов, а не строки таблицы.</span></div>
       </div>
     </div>
   </section>
 
   <section class="landing" id="landing">
     <div id="examples-block">
-      <div class="section-head"><h3>Примеры вопросов</h3><span>Работают на демо-данных</span></div>
+      <div class="section-head"><h3 id="examples-title">Примеры вопросов</h3><span id="examples-sub">Работают на демо-данных</span></div>
       <div class="grid" id="scenario-grid"></div>
     </div>
     <div class="section-head"><h3>От вопроса к решению</h3><span>Три понятных шага</span></div>
     <div class="grid steps">
-      <div class="card step"><div class="n">01</div><div><b>Задайте вопрос</b><p>Назовите цель или KPI и период — так, как спросили бы коллегу.</p></div></div>
-      <div class="card step"><div class="n">02</div><div><b>Код считает, модель выбирает</b><p>Агент вызывает инструменты MCP. Каждое число рассчитано по витрине, а не придумано моделью.</p></div></div>
+      <div class="card step"><div class="n">01</div><div><b>Загрузите отчёт и проверьте роли столбцов</b><p>Программа сама находит дату, разрезы, показатели и план. Вы подтверждаете или правите.</p></div></div>
+      <div class="card step"><div class="n">02</div><div><b>Задайте вопрос</b><p>Назовите показатель и, если нужно, период или разрез — так, как спросили бы коллегу. Код считает, модель выбирает расчёты.</p></div></div>
       <div class="card step"><div class="n">03</div><div><b>Проверьте записку</b><p>Диагноз, сценарии и что проверить вручную. Числа сверены с расчётом, сомнительные подсвечены.</p></div></div>
     </div>
     <footer class="page"><span>AI-аналитик · числа считает код, а не модель</span><span id="foot-note">&nbsp;</span></footer>
@@ -439,18 +487,39 @@ const SCENARIOS = [
 ];
 
 /* ---------- главная ---------- */
+const GRAIN_WORD = { day: "по дням", week: "по неделям", month: "по месяцам", quarter: "по кварталам", year: "по годам" };
+const isFlat = () => !!(status && status.dataset && status.dataset.kind === "flat");
+const clip = (text, n) => (text.length > n ? text.slice(0, n - 1) + "…" : text);
+
+/* Вопросы-подсказки: для демо — подобранные сценарии, для своего отчёта — вопросы, собранные из названий в данных */
+function exampleItems() {
+  if (isFlat()) return (status.questions || []).map((q) => ({ q, own: true }));
+  return SCENARIOS;
+}
+function heroPlaceholder() {
+  const items = exampleItems();
+  return items.length ? `Например: ${items[0].q}` : HERO_PLACEHOLDER;
+}
+
 function renderLanding() {
-  $("try").replaceChildren(...SCENARIOS.slice(0, 3).map((s) =>
-    el("button", { type: "button", onclick: () => { $("question").value = s.q; autosize(); $("question").focus(); } }, s.title)));
-  $("scenario-grid").replaceChildren(...SCENARIOS.map((s) =>
-    el("button", { class: "card scenario-card", type: "button", onclick: () => ask(s.q) },
-      el("span", { class: "eyebrow plain" }, s.tag), el("h4", {}, s.title), el("p", {}, s.text),
-      el("span", { class: "go" }, "Задать вопрос", icon("arrow")))));
+  const items = exampleItems();
+  $("try").replaceChildren(...items.slice(0, 3).map((s) =>
+    el("button", { type: "button", onclick: () => { $("question").value = s.q; autosize(); $("question").focus(); } }, s.own ? clip(s.q, 56) : s.title)));
+  $("scenario-grid").replaceChildren(...items.map((s) => s.own
+    ? el("button", { class: "card scenario-card q", type: "button", onclick: () => ask(s.q) },
+        el("span", { class: "eyebrow plain" }, "Вопрос по вашему отчёту"), el("h4", {}, s.q),
+        el("span", { class: "go" }, "Задать вопрос", icon("arrow")))
+    : el("button", { class: "card scenario-card", type: "button", onclick: () => ask(s.q) },
+        el("span", { class: "eyebrow plain" }, s.tag), el("h4", {}, s.title), el("p", {}, s.text),
+        el("span", { class: "go" }, "Задать вопрос", icon("arrow")))));
+  $("examples-title").textContent = isFlat() ? "Вопросы по вашему отчёту" : "Примеры вопросов";
+  $("examples-sub").textContent = isFlat() ? "Подобраны по названиям показателей и разрезов" : "Работают на демо-данных";
+  if (!chatting) $("question").placeholder = heroPlaceholder();
 }
 
 function renderStatus() {
   if (!status) return;
-  const d = status.dataset;
+  const d = status.dataset, flat = isFlat();
   const dot = $("llm-dot"), txt = $("llm-txt");
   if (status.llm_error) { dot.className = "dot bad"; txt.textContent = "Подключить GigaChat"; }
   else if (status.offline) { dot.className = "dot warn"; txt.textContent = "Подключить GigaChat"; }
@@ -459,12 +528,25 @@ function renderStatus() {
 
   const mode = status.llm_error ? "модель не настроена" : status.offline ? "офлайн-заглушка" : status.llm.replace(/^gigachat:/, "");
   $("panel-pill").textContent = mode;
-  $("glance-src").textContent = d.is_upload ? "Загруженный файл" : "Демо-данные";
-  $("glance-big").replaceChildren(String(d.kpis), el("small", {}, `KPI · ${d.goals} ${plural(d.goals, "цель", "цели", "целей")}`));
-  $("glance-sub").textContent = `${d.segments.length} сегментов клиентов · ${d.first_month} – ${d.last_month}`;
+  $("glance-src").textContent = flat ? d.source : d.is_upload ? "Загруженный файл" : "Демо-данные";
+  if (flat) {
+    const n = d.dimensions.length;
+    $("glance-big").replaceChildren(String(d.metrics), el("small", {},
+      `${plural(d.metrics, "показатель", "показателя", "показателей")} · ${n} ${plural(n, "разрез", "разреза", "разрезов")}`));
+    $("glance-sub").textContent = `${fmt(d.rows)} ${plural(d.rows, "строка", "строки", "строк")} · ` +
+      (d.first_period ? `${d.first_period} – ${d.last_period} (${GRAIN_WORD[d.grain]})` : "без дат");
+  } else {
+    $("glance-big").replaceChildren(String(d.kpis), el("small", {}, `KPI · ${d.goals} ${plural(d.goals, "цель", "цели", "целей")}`));
+    $("glance-sub").textContent = `${d.segments.length} сегментов клиентов · ${d.first_month} – ${d.last_month}`;
+  }
   $("glance-mode").textContent = `Режим: ${mode}`;
-  $("examples-block").classList.toggle("hidden", d.is_upload);
-  $("foot-note").textContent = d.is_upload ? "Загруженная витрина данных" : "Синтетические демо-данные, реальные данные не используются";
+  $("glance-action").replaceChildren(d.is_upload
+    ? el("button", { class: "btn sm", type: "button", onclick: resetDemo }, icon("refresh"), "Вернуться к демо-данным")
+    : el("span", {}, "Источники каждого вывода доступны"));
+  $("examples-block").classList.toggle("hidden", d.is_upload && !flat);
+  $("foot-note").textContent = flat ? `Отчёт «${d.source}»` : d.is_upload ? "Загруженная витрина данных"
+    : "Синтетические демо-данные, реальные данные не используются";
+  renderLanding();
 }
 function plural(n, one, few, many) {
   const m10 = n % 10, m100 = n % 100;
@@ -474,12 +556,18 @@ async function refreshStatus() {
   const res = await api("/api/status");
   if (res.ok) { status = res.body; renderStatus(); }
 }
+async function resetDemo() {
+  const res = await api("/api/upload", { method: "DELETE" });
+  if (!res.ok) { openDialog("fail", "Не удалось вернуться к демо", el("p", {}, "Сервер вернул ошибку. Попробуйте ещё раз.")); return; }
+  await refreshStatus();
+  if (chatting) restart();
+}
 
 /* ---------- режимы: главная / чат ---------- */
 const HERO_PLACEHOLDER = $("question").placeholder;
 function setChatting(on) {
   chatting = on;
-  $("question").placeholder = on ? "Спросите про цель или KPI…" : HERO_PLACEHOLDER;
+  $("question").placeholder = on ? "Спросите про показатель, разрез или цель…" : heroPlaceholder();
   document.body.classList.toggle("chatting", on);
   $("restart-btn").classList.toggle("hidden", !on);
   $(on ? "dock-slot" : "form-slot").append($("form"));
@@ -524,20 +612,35 @@ function statusBadge(data) {
 
 /* Ключевые цифры берём из результата инструмента, а не из текста модели */
 function keyTiles(data) {
-  const call = [...data.tool_calls].reverse().find((c) => c.tool === "diagnose_deviation" && !c.error);
+  const live = (name) => [...data.tool_calls].reverse().find((c) => c.tool === name && !c.error);
+  const call = live("diagnose_change") || live("get_change");
   if (!call) return null;
-  const d = call.result, dev = d.deviation, top = d.breakdown && d.breakdown.top_segment;
+  const d = call.result, dev = d.deviation || d;
+  if (dev.fact == null) return null;
   const tone = dev.significant ? (dev.unfavorable ? "neg" : "pos") : "";
+  const isPlan = d.baseline.type === "plan";
+  const scope = d.filter ? " · " + Object.entries(d.filter).map(([k, v]) => `${k}: ${v}`).join(", ") : "";
+  const baseCap = d.baseline.from ? `${d.baseline.label} · ${d.baseline.from} – ${d.baseline.to}` : d.baseline.label;
+  const pair = `${fmt(dev.fact)} / ${fmt(dev.base)}`;
+  const baseShort = { plan: "План", prev: "Пред. период", yoy: "Год назад" }[d.baseline.type] || d.baseline.label;
   const tiles = [
-    el("div", { class: "tile" }, el("div", { class: "lbl" }, "Отклонение от плана"),
-      el("div", { class: `val ${tone}` }, fmtPct(dev.deviation_pct)), el("div", { class: "cap" }, `${d.kpi} · ${dev.assessment}`)),
-    el("div", { class: "tile" }, el("div", { class: "lbl" }, "Факт / план"),
-      el("div", { class: "val" }, `${fmt(dev.fact)} / ${fmt(dev.plan)}`), el("div", { class: "cap" }, `${d.unit} · ${d.period.from} – ${d.period.to}`)),
+    el("div", { class: "tile" }, el("div", { class: "lbl" }, isPlan ? "Отклонение от плана" : "Изменение к базе"),
+      el("div", { class: `val ${tone}` }, fmtPct(dev.deviation_pct)), el("div", { class: "cap" }, `${d.metric}${scope} · ${dev.assessment}`)),
+    el("div", { class: "tile" }, el("div", { class: "lbl" }, isPlan ? "Факт / план" : "Факт / база"),
+      el("div", { class: "val" + (pair.length > 13 ? " sm" : "") }, pair),
+      el("div", { class: "cap" }, `${d.unit ? d.unit + " · " : ""}${d.period.from ? d.period.from + " – " + d.period.to : "весь файл"}`)),
+    el("div", { class: "tile" }, el("div", { class: "lbl" }, "С чем сравнивали"),
+      el("div", { class: "val sm" }, baseShort), el("div", { class: "cap" }, baseCap)),
   ];
-  if (top) tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, "Главный сегмент"),
-    el("div", { class: "val" }, top), el("div", { class: "cap" }, `${fmt(d.breakdown.top_segment_contribution_pct)}% отклонения`)));
-  if (d.off_plan_since) tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, "Отклонение держится"),
-    el("div", { class: "val" }, `${d.months_off_plan_in_row} мес.`), el("div", { class: "cap" }, `с ${d.off_plan_since}`)));
+  const primary = (d.dimensions || []).find((x) => x.dimension === d.primary_dimension);
+  const top = primary && primary.top[0];
+  if (top && dev.significant) tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, `Главный вклад · ${primary.dimension}`),
+    el("div", { class: "val" + (top.value.length > 12 ? " sm" : "") }, top.value), el("div", { class: "cap" }, `${fmt(top.contribution_pct)}% изменения`)));
+  const local = (d.local_deviations || [])[0];
+  if (local) tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, `Внутри итога · ${local.dimension}`),
+    el("div", { class: "val sm neg" }, local.value), el("div", { class: "cap" }, `${fmtPct(local.change_pct)} к базе при ровном итоге`)));
+  if (d.unfavorable_since) tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, "Ухудшение держится"),
+    el("div", { class: "val" }, `${d.unfavorable_periods_in_row} ${d.interval}`), el("div", { class: "cap" }, `с ${d.unfavorable_since}`)));
   return [el("div", { class: "kpis" }, tiles), el("div", { class: "kpis-src" }, `Цифры из расчёта · ${call.call_id}`)];
 }
 
@@ -687,9 +790,10 @@ function closeDialog() { $("overlay").classList.remove("open"); }
 function showHow() {
   openDialog("info", "Как это работает",
     el("ol", {},
-      el("li", {}, el("b", {}, "Вы задаёте вопрос"), " о цели или KPI своими словами."),
-      el("li", {}, el("b", {}, "Агент выбирает инструменты"), ": GigaChat решает, какие расчёты нужны. Инструменты работают как MCP-сервер над вашей витриной."),
-      el("li", {}, el("b", {}, "Все числа считает код"), ": отклонение от плана, вклад сегментов, связанные KPI, арифметика сценариев."),
+      el("li", {}, el("b", {}, "Вы загружаете отчёт"), " (xlsx или csv). Программа находит дату, разрезы, показатели и план, а вы проверяете роли столбцов."),
+      el("li", {}, el("b", {}, "Вы задаёте вопрос"), " о показателе, разрезе или цели своими словами."),
+      el("li", {}, el("b", {}, "Агент выбирает инструменты"), ": GigaChat решает, какие расчёты нужны. Инструменты работают как MCP-сервер над вашим отчётом."),
+      el("li", {}, el("b", {}, "Все числа считает код"), ": изменение к плану, прошлому периоду или году назад; вклад каждого значения разреза; связанные показатели; арифметика сценариев."),
       el("li", {}, el("b", {}, "Верификатор сверяет ответ"), ": каждое число в тексте должно быть в результатах инструментов, иначе оно подсвечивается.")),
     el("p", {}, "Под каждым ответом блок «Как получен ответ» показывает вызовы инструментов и их результаты."));
 }
@@ -732,21 +836,301 @@ function showConnect() {
   key.focus();
 }
 
-/* ---------- загрузка xlsx ---------- */
+/* ---------- загрузка отчёта ---------- */
+function showLoading(text) {
+  const dialog = $("dialog");
+  dialog.className = "dialog info";
+  dialog.replaceChildren(el("h3", {}, text), el("p", {}, "Это занимает несколько секунд."));
+  $("overlay").classList.add("open");
+}
+
+function showUploadErrors(res) {
+  const errors = res.body && res.body.errors ? res.body.errors : ["Не удалось загрузить файл."];
+  openDialog("fail", "Файл не прошёл проверку", el("ul", {}, errors.map((t) => el("li", {}, t))),
+    el("p", {}, "Подойдёт xlsx или csv: строка с заголовками столбцов, затем данные — дата, текстовые разрезы и числовые показатели. Исправьте файл и загрузите снова."));
+}
+
+function noteInChat(text) {
+  if (chatting) $("chat").append(el("div", { class: "msg muted", style: "text-align:center" }, text));
+}
+
+function showReady(title, questions) {
+  const d = status.dataset;
+  noteInChat(title);
+  const kv = d.kind === "flat"
+    ? [["Показателей", String(d.metrics)], ["Разрезов", d.dimensions.length ? d.dimensions.join(", ") : "нет"],
+       ["Период", d.first_period ? `${d.first_period} – ${d.last_period} (${GRAIN_WORD[d.grain]})` : "в файле нет дат"],
+       ["План", d.has_plan ? "есть" : "нет: сравнение с прошлым периодом"]]
+    : [["Показателей", String(d.kpis)], ["Целей", String(d.goals)], ["Период", `${d.first_month} – ${d.last_month}`]];
+  const dl = el("dl", { class: "kv" }, kv.map(([k, v]) => [el("dt", {}, k), el("dd", {}, v)]).flat());
+  const list = (questions || []).slice(0, 3);
+  openDialog("done", title, dl,
+    list.length ? el("p", {}, "Можно сразу спросить:") : null,
+    list.length ? el("div", { class: "qlist" }, list.map((q) => el("button", { type: "button", onclick: () => { closeDialog(); ask(q); } }, q))) : null);
+}
+
 async function upload(file) {
+  showLoading(`Читаю файл «${file.name}»…`);
   const form = new FormData();
   form.append("file", file);
-  const res = await api("/api/upload", { method: "POST", body: form });
+  let res;
+  try { res = await api("/api/upload", { method: "POST", body: form }); }
+  catch (e) { openDialog("fail", "Нет связи с сервером", el("p", {}, "Проверьте, что сервер запущен, и повторите загрузку.")); return; }
+  if (!res.ok) { showUploadErrors(res); return; }
+  if (res.body.mode === "review") { openReview(res.body.upload_id, res.body.profile); return; }
+  await refreshStatus();
+  showReady(`Файл «${file.name}» принят`, res.body.questions);
+}
+
+/* ---------- проверка ролей столбцов ---------- */
+const ROLE_LABEL = { date: "Дата", dimension: "Разрез", metric: "Показатель", plan: "План", filter: "Фильтр строк", ignore: "Не использовать" };
+const ROLES_BY_KIND = {
+  number: ["metric", "plan", "dimension", "ignore"], text: ["dimension", "filter", "ignore"], date: ["date", "dimension", "ignore"], empty: ["ignore"],
+};
+const AGG_LABEL = { sum: "сумма", mean: "среднее", last: "на конец периода" };
+const BETTER_LABEL = { up: "больше — лучше", down: "меньше — лучше", none: "нейтрально" };
+const SCALE_LABEL = { 1: "× 1", 100: "× 100 (проценты)", 1000: "× 1000" };
+
+function reviewState(uploadId, profile) {
+  return {
+    uploadId, profile, adding: false, errors: [],
+    columns: profile.columns.map((c) => ({
+      ...c, display: c.display || c.name, agg: c.agg || "sum", unit: c.unit || "", better: c.better || "up", scale: c.scale || 1,
+      planFor: c.plan_for || "", keep: c.keep ? [...c.keep] : [],
+    })),
+    ratios: profile.ratios.map((r) => ({ ...r })),
+  };
+}
+
+const stemOf = (w) => w.toLowerCase().slice(0, 4);
+const wordsOf = (t) => (t.toLowerCase().match(/[a-zа-яё]{3,}/g) || []).map(stemOf);
+
+function guessPlanFor(st, plan) {
+  const metrics = st.columns.filter((c) => c.role === "metric");
+  const own = new Set(wordsOf(plan.name).filter((w) => w !== "план" && w !== "plan"));
+  const best = metrics.map((m) => [wordsOf(m.name).filter((w) => own.has(w)).length, m.name]).sort((a, b) => b[0] - a[0])[0];
+  return best ? best[1] : "";
+}
+
+function setRole(st, c, role) {
+  c.role = role;
+  if (role === "date") st.columns.forEach((o) => { if (o !== c && o.role === "date") o.role = "ignore"; }); // дата в отчёте одна
+  if (role === "plan" && !c.planFor) c.planFor = guessPlanFor(st, c);
+  if (role === "filter" && !c.keep.length) c.keep = [...(c.values || [])];
+}
+
+function selectOf(options, value, onChange, attrs) {
+  const sel = el("select", attrs || {}, Object.entries(options).map(([k, v]) => el("option", { value: k, selected: String(k) === String(value) }, v)));
+  sel.addEventListener("change", () => onChange(sel.value));
+  return sel;
+}
+function textInput(value, onInput, cls, label) {
+  const input = el("input", { type: "text", value: value || "", class: cls || "", "aria-label": label || "", maxlength: "80" });
+  input.addEventListener("input", () => onInput(input.value));
+  return input;
+}
+const labelled = (text, control) => el("label", {}, text, control);
+
+function exampleText(c) {
+  const parts = [];
+  if (c.examples && c.examples.length) parts.push(c.examples.join(" · "));
+  if (c.kind === "number") parts.push(`от ${fmt(c.min)} до ${fmt(c.max)}`);
+  if (c.missing) parts.push(`пустых: ${c.missing}`);
+  return parts.join(" · ");
+}
+
+function optionsFor(st, c) {
+  const box = el("div", { class: "opts" });
+  const p = st.profile;
+  if (c.role === "metric") {
+    const hasPlan = st.columns.some((o) => o.role === "plan" && o.planFor === c.name);
+    box.append(
+      labelled("Название", textInput(c.display, (v) => { c.display = v; }, "w-name", "Название показателя")),
+      labelled("Как считать", selectOf(AGG_LABEL, c.agg, (v) => { c.agg = v; }, { "aria-label": "Способ агрегации" })),
+      labelled("Единица", textInput(c.unit, (v) => { c.unit = v; }, "w-unit", "Единица измерения")),
+      labelled("Что лучше", selectOf(BETTER_LABEL, c.better, (v) => { c.better = v; }, { "aria-label": "Что лучше" })));
+    if (c.scale === 100) box.append(el("span", { class: "tag", title: "Значения хранятся долями и показываются в процентах" }, "доли → %"));
+    if (hasPlan) box.append(el("span", { class: "tag" }, "есть план"));
+  } else if (c.role === "plan") {
+    const metrics = st.columns.filter((o) => o.role === "metric");
+    if (!metrics.length) box.append(el("span", { class: "reason" }, "Сначала отметьте показатель, к которому относится план."));
+    else {
+      const options = Object.fromEntries([["", "— выберите —"], ...metrics.map((m) => [m.name, m.display || m.name])]);
+      box.append(labelled("План для показателя", selectOf(options, c.planFor, (v) => { c.planFor = v; }, { "aria-label": "План для показателя" })));
+    }
+  } else if (c.role === "filter") {
+    const values = c.values || [];
+    box.append(el("span", { class: "reason" }, "Оставить строки со значениями:"),
+      el("div", { class: "keep" }, values.map((v) => {
+        const cb = el("input", { type: "checkbox", checked: c.keep.includes(v) });
+        cb.addEventListener("change", () => { c.keep = cb.checked ? [...c.keep, v] : c.keep.filter((x) => x !== v); });
+        return el("label", {}, cb, v);
+      })));
+  } else if (c.role === "date") {
+    box.append(el("span", { class: "reason" }, p.grain ? `Детализация: ${GRAIN_WORD[p.grain]}` : "Даты разобраны при сохранении"));
+  } else if (c.role === "dimension") {
+    box.append(el("span", { class: "reason" }, `Значений: ${c.n_unique}. По ним ищется, где именно произошло изменение.`));
+  } else {
+    box.append(el("span", { class: "reason" }, c.reason || "Столбец не используется"));
+  }
+  return box;
+}
+
+function columnRow(st, c) {
+  const allowed = (ROLES_BY_KIND[c.kind] || ["ignore"]).filter((r) => r !== "filter" || (c.values && c.values.length));
+  const roles = Object.fromEntries(allowed.map((r) => [r, ROLE_LABEL[r]]));
+  const sel = selectOf(roles, c.role, (v) => { setRole(st, c, v); renderReview(st); }, { class: "role", "data-role": c.role, "aria-label": `Роль столбца ${c.name}` });
+  return el("div", { class: "col-row" + (c.role === "ignore" ? " off" : "") },
+    el("div", { class: "col-name" }, el("b", {}, c.name), el("small", {}, exampleText(c))), sel, optionsFor(st, c));
+}
+
+function formulaOf(r) {
+  if (r.kind === "sum") return `${r.column} (сумма)`;
+  return `${r.num} / ${r.den}` + (Number(r.scale) !== 1 ? ` × ${r.scale}` : "");
+}
+
+function ratioRow(st, r) {
+  const cb = el("input", { type: "checkbox", checked: !!r.enabled, "aria-label": `Включить ${r.name}` });
+  cb.addEventListener("change", () => { r.enabled = cb.checked; renderReview(st); });
+  return el("div", { class: "ratio-row" + (r.enabled ? "" : " off") }, cb,
+    textInput(r.name, (v) => { r.name = v; }, "", "Название отношения"), el("span", { class: "formula" }, formulaOf(r)),
+    textInput(r.unit, (v) => { r.unit = v; }, "w-unit", "Единица"),
+    selectOf(BETTER_LABEL, r.better, (v) => { r.better = v; }, { "aria-label": "Что лучше" }));
+}
+
+function addRatioForm(st) {
+  const nums = st.columns.filter((c) => c.kind === "number");
+  const cols = Object.fromEntries(nums.map((c) => [c.name, c.name]));
+  const f = { name: "", num: nums[0] && nums[0].name, den: nums[1] && nums[1].name, scale: "1", unit: "", better: "up" };
+  const err = el("span", { class: "reason", style: "color:var(--bad)" });
+  const add = el("button", { class: "btn sm primary", type: "button" }, "Добавить");
+  add.addEventListener("click", () => {
+    const taken = [...st.columns.filter((c) => c.role === "metric").map((c) => c.display || c.name), ...st.ratios.map((r) => r.name)];
+    if (!f.name.trim()) { err.textContent = "Введите название."; return; }
+    if (taken.includes(f.name.trim())) { err.textContent = "Такое название уже есть."; return; }
+    if (!f.num || !f.den || f.num === f.den) { err.textContent = "Выберите два разных столбца."; return; }
+    st.ratios.push({ name: f.name.trim(), num: f.num, den: f.den, scale: Number(f.scale), unit: f.unit.trim(), better: f.better, enabled: true });
+    st.adding = false;
+    renderReview(st);
+  });
+  return el("div", { class: "ratio-add" },
+    labelled("Название", textInput("", (v) => { f.name = v; }, "w-name", "Название нового отношения")),
+    labelled("Числитель", selectOf(cols, f.num, (v) => { f.num = v; }, { "aria-label": "Числитель" })),
+    labelled("Знаменатель", selectOf(cols, f.den, (v) => { f.den = v; }, { "aria-label": "Знаменатель" })),
+    labelled("Множитель", selectOf(SCALE_LABEL, f.scale, (v) => { f.scale = v; }, { "aria-label": "Множитель" })),
+    labelled("Единица", textInput("", (v) => { f.unit = v; }, "w-unit", "Единица")),
+    labelled("Что лучше", selectOf(BETTER_LABEL, f.better, (v) => { f.better = v; }, { "aria-label": "Что лучше" })),
+    add, err);
+}
+
+/* Собирает спецификацию из выбора пользователя; возвращает { spec, errors } */
+function buildSpec(st) {
+  const errors = [];
+  const cols = st.columns;
+  const dates = cols.filter((c) => c.role === "date");
+  if (dates.length > 1) errors.push("Датой может быть только один столбец.");
+  const metrics = cols.filter((c) => c.role === "metric").map((c) => {
+    const plan = cols.find((o) => o.role === "plan" && o.planFor === c.name);
+    return { name: (c.display || "").trim() || c.name, kind: c.agg, column: c.name, unit: (c.unit || "").trim(), better: c.better,
+      scale: c.scale, plan_column: plan ? plan.name : null };
+  });
+  for (const c of cols.filter((o) => o.role === "plan" && !metrics.some((m) => m.column === o.planFor))) {
+    errors.push(`План «${c.name}»: выберите показатель, к которому он относится, или отметьте столбец «Не использовать».`);
+  }
+  const filters = cols.filter((c) => c.role === "filter").map((c) => {
+    if (!c.keep.length) errors.push(`Фильтр «${c.name}»: отметьте хотя бы одно значение.`);
+    return { column: c.name, values: c.keep };
+  });
+  const ratios = st.ratios.filter((r) => r.enabled).map((r) => (r.kind === "sum"
+    ? { name: r.name.trim(), kind: "sum", column: r.column, unit: (r.unit || "").trim(), better: r.better, scale: 1 }
+    : { name: r.name.trim(), kind: "ratio", num: r.num, den: r.den, unit: (r.unit || "").trim(), better: r.better, scale: Number(r.scale) || 1 }));
+  return {
+    errors,
+    spec: { sheet: st.profile.sheet, date: dates[0] ? dates[0].name : null, dimensions: cols.filter((c) => c.role === "dimension").map((c) => c.name),
+      metrics: [...metrics, ...ratios], filters, significant_pct: 3 },
+  };
+}
+
+function showErrors(st, errors) {
+  st.errors = errors;
+  st.toTop = true; // ошибки показываются в начале окна: прокручиваем к ним
+  renderReview(st);
+}
+
+async function switchSheet(st, sheet) {
+  const res = await api("/api/datasets/profile", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ upload_id: st.uploadId, sheet }) });
+  if (!res.ok) { showErrors(st, (res.body && res.body.errors) || ["Не удалось прочитать лист."]); return; }
+  Object.assign(st, reviewState(st.uploadId, res.body.profile));
+  renderReview(st);
+}
+
+async function submitReview(st, button) {
+  const built = buildSpec(st);
+  if (built.errors.length) { showErrors(st, built.errors); return; }
+  button.disabled = true; button.textContent = "Проверяю…";
+  let res;
+  try {
+    res = await api("/api/datasets/confirm", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ upload_id: st.uploadId, spec: built.spec }) });
+  } catch (e) { res = { ok: false, body: { errors: ["Нет связи с сервером."] } }; }
   if (res.ok) {
     await refreshStatus();
-    openDialog("done", "Файл принят",
-      el("p", {}, `Данные обновлены: ${file.name}. Новые вопросы будут считаться по загруженной витрине.`),
-      el("p", {}, "Вернуться к демо-данным: удалите файл data/uploads/active.xlsx и обновите страницу."));
-  } else {
-    const errors = res.body && res.body.errors ? res.body.errors : ["Не удалось загрузить файл."];
-    openDialog("fail", "Файл не прошёл проверку", el("ul", {}, errors.map((t) => el("li", {}, t))),
-      el("p", {}, "Нужны листы goals, facts, links с колонками, описанными в README. Исправьте файл и загрузите снова."));
+    showReady(`Отчёт «${st.profile.filename}» принят`, res.body.questions);
+    return;
   }
+  showErrors(st, (res.body && res.body.errors) || ["Не удалось сохранить настройки."]);
+}
+
+function openReview(uploadId, profile) {
+  renderReview(reviewState(uploadId, profile));
+  $("overlay").classList.add("open");
+}
+
+function renderReview(st) {
+  const dialog = $("dialog"), top = dialog.scrollTop, p = st.profile;
+  dialog.className = "dialog wide review";
+  const meta = [`Файл «${p.filename}»`, p.sheets.length > 1 ? null : `лист «${p.sheet}»`, `${fmt(p.rows)} ${plural(p.rows, "строка", "строки", "строк")}`,
+    p.period ? `${p.period.from} – ${p.period.to} (${GRAIN_WORD[p.grain]})` : "дат не найдено"].filter(Boolean).join(" · ");
+  const parts = [el("h3", {}, "Проверьте роли и типы столбцов"), el("p", { class: "review-meta" }, meta)];
+
+  const tools = [];
+  if (p.sheets.length > 1) {
+    tools.push(labelled("Лист с данными", selectOf(Object.fromEntries(p.sheets.map((s) => [s, s])), p.sheet, (v) => switchSheet(st, v), { "aria-label": "Лист с данными" })));
+  }
+  if (tools.length) parts.push(el("div", { class: "review-tools opts" }, tools));
+  if (st.errors.length) parts.push(el("div", { class: "alert bad" }, el("b", {}, "Нужно поправить:"), el("ul", {}, st.errors.map((t) => el("li", {}, t)))));
+  if (p.warnings.length) parts.push(el("div", { class: "alert warn" }, el("b", {}, "На что обратить внимание:"), el("ul", {}, p.warnings.map((t) => el("li", {}, t)))));
+  if (p.notes.length) {
+    parts.push(el("details", {}, el("summary", {}, `Заметки в файле (${p.notes.length})`),
+      el("p", { class: "hint2" }, "Показаны только вам. В модель они не передаются: тексты в файлах могут содержать посторонние указания."),
+      el("ul", {}, p.notes.map((t) => el("li", {}, t)))));
+  }
+
+  parts.push(el("div", { class: "cols" },
+    el("div", { class: "col-row head" }, el("span", {}, "Столбец"), el("span", {}, "Что это"), el("span", {}, "Настройки")),
+    ...st.columns.map((c) => columnRow(st, c))));
+
+  parts.push(el("h4", {}, "Отношения"),
+    el("p", { class: "hint2" }, "Доли и стоимости считаются как отношение сумм (клики / показы), а не как среднее готовых процентов. Отметьте нужные или добавьте свои."));
+  const ratioBox = el("div", { class: "ratios" });
+  if (st.ratios.length) ratioBox.append(el("div", { class: "ratio-row head" }, el("span"), el("span", {}, "Название"), el("span", {}, "Формула"), el("span", {}, "Ед."), el("span", {}, "Что лучше")));
+  else ratioBox.append(el("div", { class: "ratio-row" }, el("span"), el("span", { class: "formula", style: "grid-column: 2 / -1" }, "Подходящих пар столбцов не найдено. Можно добавить отношение вручную.")));
+  st.ratios.forEach((r) => ratioBox.append(ratioRow(st, r)));
+  if (st.adding) ratioBox.append(addRatioForm(st));
+  parts.push(ratioBox);
+  if (!st.adding) {
+    parts.push(el("button", { class: "btn sm", type: "button", onclick: () => { st.adding = true; renderReview(st); } }, "＋ Добавить отношение"));
+  }
+
+  const save = el("button", { class: "btn primary", type: "button" }, "Сохранить и анализировать");
+  save.addEventListener("click", () => submitReview(st, save));
+  parts.push(el("div", { class: "actions split" },
+    el("span", { class: "muted" }, "Настройки можно будет изменить, загрузив файл заново."),
+    el("div", { class: "group" }, el("button", { class: "btn", type: "button", onclick: closeDialog }, "Отмена"), save)));
+  dialog.replaceChildren(...parts);
+  dialog.scrollTop = st.toTop ? 0 : top;
+  st.toTop = false;
 }
 
 /* ---------- события ---------- */
@@ -769,7 +1153,7 @@ $("llm-btn").addEventListener("click", showConnect);
 $("how-btn").addEventListener("click", showHow);
 $("brand").addEventListener("click", () => { if (chatting) restart(); else window.scrollTo({ top: 0 }); });
 $("restart-btn").addEventListener("click", restart);
-$("overlay").addEventListener("click", (e) => { if (e.target.id === "overlay") closeDialog(); });
+$("overlay").addEventListener("click", (e) => { if (e.target.id === "overlay" && !$("dialog").classList.contains("wide")) closeDialog(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDialog(); });
 
 const dz = $("dropzone");
