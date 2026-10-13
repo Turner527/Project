@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from agent.dashboard import DashboardAgent, context_text
-from agent.llm import ConfigError, LLMClient, LLMError, load_env, make_llm
+from agent.llm import ConfigError, GigaChatLLM, LLMClient, LLMError, KNOWN_MODELS, available_models, load_env, make_llm
 from agent.loop import Agent, DashboardContext
 from agent.prompts import PROMPT_VERSION
 from agent.tool_adapter import ToolAdapter, make_adapter
@@ -35,6 +35,10 @@ class AskRequest(BaseModel):
 
 class DashboardRequest(BaseModel):
     client_id: str | None = Field(default=None, max_length=64)
+
+
+class ModelRequest(BaseModel):
+    model: str = Field(min_length=1, max_length=64)
 
 
 class ProfileRequest(BaseModel):
@@ -80,7 +84,7 @@ def create_app(
         yield
         adapter.close()
 
-    app = FastAPI(title="AI-аналитик стратегического менеджмента банка", lifespan=lifespan)
+    app = FastAPI(title="PRISMA: анализ отчётов и KPI", lifespan=lifespan)
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
@@ -154,6 +158,30 @@ def create_app(
             return JSONResponse({"ok": False, "detail": str(exc)}, status_code=422)
         state["llm"], state["error"] = new_llm, None
         return JSONResponse({"ok": True, "llm": new_llm.name})
+
+    @app.get("/api/models")
+    def models() -> dict:
+        """Модели для выбора: список аккаунта GigaChat (если подключён и отвечает) или встроенный."""
+        llm = state["llm"]
+        if isinstance(llm, GigaChatLLM):
+            ids, source = available_models(llm)
+            if llm.config.model not in ids:
+                ids = [llm.config.model, *ids]
+            return {"current": llm.config.model, "models": ids, "source": source, "switchable": True}
+        return {"current": None, "models": list(KNOWN_MODELS), "source": "known", "switchable": False}
+
+    @app.post("/api/model")
+    def set_model(request: Request, req: ModelRequest) -> JSONResponse:
+        """Переключает модель подключённого GigaChat и запоминает выбор в .env. Только с локального адреса."""
+        if (request.client.host if request.client else "") not in connect_mod.LOCAL_HOSTS:
+            raise HTTPException(403, "Смена модели из интерфейса доступна только с локального компьютера.")
+        if not isinstance(state["llm"], GigaChatLLM):
+            return JSONResponse({"ok": False, "detail": "Сначала подключите GigaChat: сейчас работает офлайн-заглушка."}, status_code=409)
+        try:
+            state["llm"] = connect_mod.switch_model(state["llm"], req.model, env_path or connect_mod.ENV_PATH)
+        except LLMError as exc:
+            return JSONResponse({"ok": False, "detail": str(exc)}, status_code=422)
+        return JSONResponse({"ok": True, "llm": state["llm"].name})
 
     @app.post("/api/upload")
     def upload(file: UploadFile = File(...)) -> JSONResponse:

@@ -107,3 +107,87 @@ def test_client_uses_the_saved_certificate_not_the_deleted_temp_file(tmp_path, m
     assert not list(certs.glob("*.tmp"))
     for name in ("GIGACHAT_CREDENTIALS", "GIGACHAT_SCOPE", "GIGACHAT_CA_BUNDLE", "GIGACHAT_MODEL"):
         monkeypatch.delenv(name, raising=False)
+
+
+# ---------- выбор модели ----------
+
+
+class FakeSDK:
+    def __init__(self, ids=("GigaChat-2", "GigaChat-2-Pro", "GigaChat-3-Ultra", "EmbeddingsGigaR"), fail=False):
+        self.ids, self.fail = ids, fail
+
+    def get_models(self):
+        if self.fail:
+            raise OSError("нет сети")
+        from types import SimpleNamespace
+        return SimpleNamespace(data=[SimpleNamespace(id_=i) for i in self.ids])
+
+
+def gigachat_client(tmp_path, monkeypatch, sdk=None, model="GigaChat-2-Pro"):
+    from agent.llm import GigaChatConfig, GigaChatLLM
+
+    for name in ("GIGACHAT_CREDENTIALS", "GIGACHAT_SCOPE", "GIGACHAT_CA_BUNDLE", "GIGACHAT_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    env_file = tmp_path / ".env"
+    llm = GigaChatLLM(GigaChatConfig(credentials=KEY, model=model), client=sdk or FakeSDK())
+    app = create_app(llm=llm, adapter=make_adapter("direct"), store=LogStore(tmp_path / "l.db"), load_env_file=False,
+                     env_path=env_file, certs_dir=tmp_path / "certs")
+    return TestClient(app), env_file
+
+
+def test_models_come_from_the_account_without_embeddings(tmp_path, monkeypatch):
+    client, _ = gigachat_client(tmp_path, monkeypatch)
+    body = client.get("/api/models").json()
+    assert body == {"current": "GigaChat-2-Pro", "models": ["GigaChat-2", "GigaChat-2-Pro", "GigaChat-3-Ultra"],
+                    "source": "api", "switchable": True}
+
+
+def test_models_fall_back_to_the_known_list_when_the_account_does_not_answer(tmp_path, monkeypatch):
+    client, _ = gigachat_client(tmp_path, monkeypatch, FakeSDK(fail=True), model="My-model")
+    body = client.get("/api/models").json()
+    assert body["source"] == "known" and body["models"][0] == "My-model"
+    assert "GigaChat-3-Ultra" in body["models"] and body["current"] == "My-model"
+
+
+def test_offline_stub_lists_known_models_but_cannot_switch(setup):
+    make, env_file, *_ = setup
+    client = make(lambda llm: None)
+    body = client.get("/api/models").json()
+    assert body["current"] is None and body["switchable"] is False and "GigaChat-3-Ultra" in body["models"]
+    r = client.post("/api/model", json={"model": "GigaChat-3-Ultra"})
+    assert r.status_code == 409 and "Сначала подключите GigaChat" in r.json()["detail"] and not env_file.exists()
+
+
+def test_switching_the_model_saves_the_choice_and_keeps_the_connection(tmp_path, monkeypatch):
+    client, env_file = gigachat_client(tmp_path, monkeypatch)
+    env_file.write_text("# мои настройки\nGIGACHAT_MODEL=GigaChat-2-Pro\nPORT=9000\n")
+    r = client.post("/api/model", json={"model": "GigaChat-3-Ultra"})
+    assert r.status_code == 200 and r.json() == {"ok": True, "llm": "gigachat:GigaChat-3-Ultra"}
+    assert client.get("/api/status").json()["llm"] == "gigachat:GigaChat-3-Ultra"
+    assert client.get("/api/models").json()["current"] == "GigaChat-3-Ultra"
+    text = env_file.read_text()
+    assert "GIGACHAT_MODEL=GigaChat-3-Ultra" in text and "# мои настройки" in text and "PORT=9000" in text
+    assert os.environ["GIGACHAT_MODEL"] == "GigaChat-3-Ultra"
+    monkeypatch.delenv("GIGACHAT_MODEL")
+
+
+def test_a_model_outside_the_account_list_or_with_a_bad_name_is_rejected(tmp_path, monkeypatch):
+    client, env_file = gigachat_client(tmp_path, monkeypatch)
+    r = client.post("/api/model", json={"model": "GigaChat-9-Mega"})
+    assert r.status_code == 422 and "нет в списке вашего аккаунта" in r.json()["detail"] and "GigaChat-3-Ultra" in r.json()["detail"]
+    r = client.post("/api/model", json={"model": "плохо; rm -rf"})
+    assert r.status_code == 422 and "латинские буквы" in r.json()["detail"]
+    assert client.post("/api/model", json={"model": ""}).status_code == 422
+    assert not env_file.exists() and client.get("/api/status").json()["llm"] == "gigachat:GigaChat-2-Pro"
+
+
+def test_any_well_formed_name_is_accepted_when_the_account_list_is_unavailable(tmp_path, monkeypatch):
+    client, _ = gigachat_client(tmp_path, monkeypatch, FakeSDK(fail=True))
+    assert client.post("/api/model", json={"model": "GigaChat-Next"}).status_code == 200
+    monkeypatch.delenv("GIGACHAT_MODEL", raising=False)
+
+
+def test_switching_the_model_is_local_only(tmp_path, monkeypatch):
+    client, _ = gigachat_client(tmp_path, monkeypatch)
+    remote = TestClient(client.app, client=("203.0.113.5", 5000))
+    assert remote.post("/api/model", json={"model": "GigaChat-3-Ultra"}).status_code == 403

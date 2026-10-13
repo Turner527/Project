@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI-аналитик отчётов</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='11' fill='%2321a038'/%3E%3Cpath d='M11 26l6-7 5 4 7-9' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<title>PRISMA — анализ отчётов и KPI</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='11' fill='%2321a038'/%3E%3Cg stroke='white' stroke-linecap='round' fill='none'%3E%3Cpath d='M3.5 12.5L13.2 20.4M3.5 20.5H12.6M3.5 28.5L13.2 21.6' stroke-width='1.6'/%3E%3Cpath d='M26.8 20.6H37' stroke-width='2.8'/%3E%3C/g%3E%3Cpath d='M20 8L31 29H9z' fill='white' fill-opacity='.3' stroke='white' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
   /* ---------- темы: тёмно-зелёная по умолчанию, светлая по переключателю ---------- */
   :root {
@@ -227,6 +227,12 @@
   .connect-form label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
   .connect-form input, .connect-form select { font: inherit; font-size: 15px; color: var(--ink); background: var(--composer-bg); border: 1px solid var(--line-strong); border-radius: 13px; padding: 10px 14px; }
   .connect-form small { color: var(--faint); font-size: 12.5px; }
+  .model-picker { margin: 4px 0 18px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-2); }
+  .model-picker h4 { margin: 0 0 8px; font-size: 15px; }
+  .model-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .model-row select { flex: 1 1 200px; font: inherit; font-size: 15px; color: var(--ink); background: var(--composer-bg); border: 1px solid var(--line-strong); border-radius: 13px; padding: 9px 14px; }
+  .model-picker small { display: block; margin-top: 8px; color: var(--faint); font-size: 12.5px; }
+  .model-picker .alert { margin: 10px 0 0; }
 
 
   /* ---------- проверка ролей столбцов ---------- */
@@ -469,12 +475,20 @@
   <div class="wrap">
     <button class="brand" id="brand" type="button" aria-label="На главную">
       <svg viewBox="0 0 40 40" aria-hidden="true">
-        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#21a038"/><stop offset="1" stop-color="#2ed0a0"/></linearGradient></defs>
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b8f35"/><stop offset="1" stop-color="#2ed0a0"/></linearGradient>
+          <linearGradient id="lp" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".55"/><stop offset="1" stop-color="#b9f5d0" stop-opacity=".18"/></linearGradient>
+        </defs>
         <rect width="40" height="40" rx="11" fill="url(#lg)"/>
-        <path d="M11 26l6-7 5 4 7-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="29" cy="14" r="2.4" fill="#fff"/>
+        <g stroke="#fff" stroke-linecap="round" fill="none">
+          <path d="M3.5 12.5L13.2 20.4M3.5 20.5H12.6M3.5 28.5L13.2 21.6" stroke-width="1.4" opacity=".9"/>
+          <path d="M26.8 20.6H37" stroke-width="2.6"/>
+        </g>
+        <g fill="#fff"><circle cx="3.5" cy="12.5" r="1.3"/><circle cx="3.5" cy="20.5" r="1.3"/><circle cx="3.5" cy="28.5" r="1.3"/></g>
+        <path d="M20 8L31 29H9z" fill="url(#lp)" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
+        <path d="M20 8L20 29" stroke="#fff" stroke-width="1" opacity=".45"/>
       </svg>
-      <span><b>AI-аналитик</b><small>Анализ отчётов и KPI</small></span>
+      <span><b>PRISMA</b><small>Анализ отчётов и KPI</small></span>
     </button>
     <button class="nav-link" id="how-btn" type="button">Как это работает</button>
     <span class="spacer"></span>
@@ -552,7 +566,7 @@
       <div class="card step"><div class="n">03</div><div><b>Задайте вопрос</b><p>Про данные («почему вырос показатель?») или про решения («что делать в первую очередь?») — так, как спросили бы коллегу.</p></div></div>
       <div class="card step"><div class="n">04</div><div><b>Проверьте записку</b><p>Диагноз, сценарии и что проверить вручную. Числа сверены с расчётом, сомнительные подсвечены.</p></div></div>
     </div>
-    <footer class="page"><span>AI-аналитик · числа считает код, а не модель</span><span id="foot-note">&nbsp;</span></footer>
+    <footer class="page"><span>PRISMA · числа считает код, а не модель</span><span id="foot-note">&nbsp;</span></footer>
   </section>
 </div>
 
@@ -711,7 +725,7 @@ function renderStatus() {
   if (status.llm_error) { dot.className = "dot bad"; txt.textContent = "Подключить GigaChat"; }
   else if (status.offline) { dot.className = "dot warn"; txt.textContent = "Подключить GigaChat"; }
   else { dot.className = "dot ok"; txt.textContent = status.llm.replace(/^gigachat:/, ""); }
-  $("llm-btn").title = status.llm_error || (status.offline ? "Сейчас работает офлайн-заглушка" : `Версия промпта ${status.prompt_version}`);
+  $("llm-btn").title = status.llm_error || (status.offline ? "Сейчас работает офлайн-заглушка" : `Модель и подключение · версия промпта ${status.prompt_version}`);
 
   const mode = status.llm_error ? "модель не настроена" : status.offline ? "офлайн-заглушка" : status.llm.replace(/^gigachat:/, "");
   $("panel-pill").textContent = mode;
@@ -1004,6 +1018,33 @@ function showHow() {
     el("p", {}, "Под каждым ответом блок «Как получен ответ», а под дашбордом блок «Как построен дашборд» показывают, что ушло в модель и что вернулось."));
 }
 
+const KNOWN_MODELS = ["GigaChat-2", "GigaChat-2-Pro", "GigaChat-2-Max", "GigaChat-3-Ultra"];
+
+/* Выбор модели у уже подключённого GigaChat: список берётся у аккаунта, пока он не пришёл — встроенный */
+function modelPicker() {
+  const current = (status.llm || "").replace(/^gigachat:/, "");
+  const select = el("select", { id: "model-select", "aria-label": "Модель GigaChat" }, el("option", { value: current }, current));
+  const apply = el("button", { class: "btn primary sm", type: "button", disabled: true }, "Использовать");
+  const msg = el("div", { class: "alert bad hidden" });
+  const note = el("small", {}, "Загружаю список моделей аккаунта…");
+  const box = el("div", { class: "model-picker" }, el("h4", {}, "Модель"),
+    el("div", { class: "model-row" }, select, apply), note, msg);
+  api("/api/models").then((res) => {
+    if (!res.ok) { note.textContent = "Список моделей получить не удалось: можно ввести название ниже."; return; }
+    select.replaceChildren(...res.body.models.map((m) => el("option", { value: m, selected: m === res.body.current }, m)));
+    note.textContent = res.body.source === "api" ? "Список получен от вашего аккаунта GigaChat." : "Список аккаунта недоступен, показаны известные модели.";
+  });
+  select.addEventListener("change", () => { apply.disabled = select.value === current; });
+  apply.addEventListener("click", async () => {
+    apply.disabled = true; msg.classList.add("hidden");
+    const res = await api("/api/model", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: select.value }) });
+    if (res.ok) { await refreshStatus(); openDialog("done", "Модель выбрана", el("p", {}, `Дальше отвечает ${select.value}. Выбор сохранён в .env. Уже построенный дашборд остался прежним: его можно перестроить на новой модели.`)); return; }
+    const d = res.body && res.body.detail;
+    msg.textContent = typeof d === "string" ? d : "Не удалось сменить модель."; msg.classList.remove("hidden"); apply.disabled = false;
+  });
+  return box;
+}
+
 function showConnect() {
   const s = status || {};
   const state = s.llm_error ? ["bad", "Модель не настроена"] : s.offline ? ["warn", "Работает офлайн-заглушка"] : ["ok", `Подключено: ${s.llm}`];
@@ -1011,12 +1052,13 @@ function showConnect() {
   if (s.llm_error) body.push(el("div", { class: "alert bad" }, s.llm_error));
   const key = el("input", { type: "password", id: "key-input", autocomplete: "off", placeholder: "Ключ авторизации из личного кабинета GigaChat API" });
   const scope = el("select", { id: "scope-input" }, ["GIGACHAT_API_PERS", "GIGACHAT_API_B2B", "GIGACHAT_API_CORP"].map((v) => el("option", { value: v }, v)));
-  const model = el("input", { type: "text", id: "model-input", placeholder: "GigaChat-2-Pro (по умолчанию)" });
+  const known = el("datalist", { id: "model-list" }, KNOWN_MODELS.map((m) => el("option", { value: m })));
+  const model = el("input", { type: "text", id: "model-input", list: "model-list", placeholder: "GigaChat-2-Pro (по умолчанию)" });
   const cert = el("input", { type: "file", id: "cert-input", accept: ".pem,.crt,.cer" });
   const msg = el("div", { class: "alert bad hidden", id: "connect-msg" });
   const submit = el("button", { class: "btn primary sm", type: "submit" }, "Проверить и сохранить");
   const form = el("form", { class: "connect-form", autocomplete: "off" },
-    el("label", {}, "Ключ авторизации", key), el("label", {}, "Scope", scope), el("label", {}, "Модель (необязательно)", model),
+    el("label", {}, "Ключ авторизации", key), el("label", {}, "Scope", scope), el("label", {}, "Модель (необязательно)", model, known),
     el("label", {}, "Сертификат Минцифры (PEM)", cert), el("small", {}, "Нужен при первом подключении. Если сертификат уже лежит в certs/ и указан в .env, поле можно оставить пустым."),
     msg, el("div", { class: "actions" }, submit));
   form.addEventListener("submit", async (e) => {
@@ -1037,6 +1079,7 @@ function showConnect() {
       msg.classList.remove("hidden");
     }
   });
+  if (!s.llm_error && !s.offline) body.push(modelPicker());
   body.push(form, el("p", {}, "Ключ проверяется живым запросом и сохраняется локально в .env. Проверка SSL всегда включена."));
   const dialog = openDialog("info", "Подключение к GigaChat", ...body);
   key.focus();

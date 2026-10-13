@@ -60,7 +60,7 @@ def upload(client, content, name="kpi.xlsx"):
 
 def test_index_serves_russian_interface(client):
     html = client.get("/").text
-    for fragment in ("AI-аналитик", "Загрузить отчёт", "Полезно", "Не полезно", "Как получен ответ", "lang=\"ru\"",
+    for fragment in ("PRISMA", "Загрузить отчёт", "Полезно", "Не полезно", "Как получен ответ", "lang=\"ru\"",
                      "Подключить GigaChat", "Новый разговор", "Проверьте роли и типы столбцов", "Вернуться к демо-данным",
                      'accept=".xlsx,.csv"'):
         assert fragment in html

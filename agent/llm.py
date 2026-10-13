@@ -17,6 +17,9 @@ ROOT = Path(__file__).resolve().parent.parent
 TEMPERATURE = 0.01
 DEFAULT_SCOPE = "GIGACHAT_API_PERS"
 DEFAULT_MODEL = "GigaChat-2-Pro"
+# Модели, которые предлагаются в интерфейсе, пока список не получен из API (или он недоступен). Идентификаторы сверьте
+# со списком, который вернёт ваш аккаунт: в интерфейсе он подгружается через get_models().
+KNOWN_MODELS = ("GigaChat-2", "GigaChat-2-Pro", "GigaChat-2-Max", "GigaChat-3-Ultra")
 REQUEST_TIMEOUT_S = 90
 
 
@@ -263,6 +266,19 @@ class GigaChatLLM:
             functions_state_id=message.functions_state_id,
             finish_reason=choice.finish_reason,
         )
+
+
+def available_models(llm) -> tuple[list[str], str]:
+    """Модели для выбора: (идентификаторы, источник). Источник «api» — список аккаунта, «known» — встроенный запасной."""
+    ids: list[str] = []
+    try:
+        ids = [m.id_ for m in llm._client.get_models().data]
+    except Exception:  # noqa: BLE001 — нет сети или прав: покажем встроенный список
+        pass
+    ids = [i for i in ids if i.lower().startswith("gigachat") and "embedding" not in i.lower()]
+    if ids:
+        return ids, "api"
+    return list(KNOWN_MODELS), "known"
 
 
 def make_llm(backend: str | None = None) -> LLMClient:

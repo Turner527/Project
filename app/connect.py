@@ -3,7 +3,10 @@ import os
 import ssl
 from pathlib import Path
 
-from agent.llm import ROOT, GigaChatConfig, GigaChatLLM, LLMError, explain_error
+import dataclasses
+import re
+
+from agent.llm import ROOT, GigaChatConfig, GigaChatLLM, LLMError, available_models, explain_error
 
 ENV_PATH = ROOT / ".env"
 CERTS_DIR = ROOT / "certs"
@@ -45,6 +48,24 @@ def write_env(path: Path, updates: dict[str, str]) -> None:
     out += [f"{k}={v}" for k, v in updates.items() if k not in seen]
     path.write_text("\n".join(out) + "\n", "utf-8")
     os.chmod(path, 0o600)
+
+
+MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def switch_model(llm: GigaChatLLM, model: str, env_path: Path) -> GigaChatLLM:
+    """Переключает модель уже подключённого GigaChat без повторной авторизации и запоминает выбор в .env.
+    Если аккаунт отдаёт список моделей, названия вне списка отклоняются. Ошибки — LLMError."""
+    model = model.strip()
+    if not MODEL_RE.match(model):
+        raise LLMError("Название модели: латинские буквы, цифры, точка, дефис и подчёркивание, например GigaChat-2-Pro.")
+    ids, source = available_models(llm)
+    if source == "api" and model not in ids:
+        raise LLMError(f"Модели «{model}» нет в списке вашего аккаунта: {', '.join(ids)}.")
+    new = GigaChatLLM(dataclasses.replace(llm.config, model=model), client=llm._client)
+    write_env(env_path, {"GIGACHAT_MODEL": model})
+    os.environ["GIGACHAT_MODEL"] = model
+    return new
 
 
 def connect(credentials: str, scope: str, model: str, cert_bytes: bytes | None, env_path: Path, certs_dir: Path,
