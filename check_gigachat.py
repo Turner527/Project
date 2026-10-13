@@ -3,7 +3,7 @@
 Запуск:  python check_gigachat.py            (полная проверка)
          python check_gigachat.py --offline  (только настройки и сертификат, без сети)
 
-Шаги идут по цепочке «настройки -> сеть -> TLS с вашим сертификатом -> ключ -> модель -> вызов функции»:
+Шаги идут по цепочке «настройки -> сеть -> TLS с вашим сертификатом -> ключ -> модель -> вызов функции -> план дашборда»:
 если упал ранний шаг, зависящие от него пропускаются, а причина названа явно (ключ, scope, сертификат,
 лимиты или сеть). Проверка SSL здесь тоже не отключается.
 """
@@ -216,6 +216,33 @@ def check_function_calling(llm: GigaChatLLM) -> Result:
                   "Агент будет работать нестабильно: возьмите более сильную модель (GigaChat-2-Pro или GigaChat-2-Max).")
 
 
+def check_dashboard(llm: GigaChatLLM) -> Result:
+    """Строит дашборд по синтетической демо-витрине (ваши данные в проверке не участвуют): возвращает ли модель план в
+    нужном формате и нет ли в её текстах чисел без источника."""
+    from agent.dashboard import DashboardAgent
+    from data.strategic import to_table
+    from data.validation import load_dataset
+    from tools import datastore
+
+    title = "План дашборда (демо-данные, около 8 тыс. токенов)"
+    try:
+        path = datastore.DEFAULT_PATH
+        res = DashboardAgent(llm).run(to_table(load_dataset(path, name=path.name), path.name))
+    except Exception as exc:  # noqa: BLE001 — проверка не должна падать из-за собственной ошибки
+        return Result(WARN, title, f"не удалось выполнить проверку: {type(exc).__name__}: {exc}")
+    if res.plan_source != "model":
+        return Result(WARN, title, res.error or "модель не вернула план.",
+                      "Приложение покажет дашборд по умолчанию (собранный кодом). Откройте «Как построен дашборд»: там сырой ответ "
+                      "модели. Если так будет и дальше, возьмите модель посильнее (GigaChat-2-Pro или GigaChat-2-Max).")
+    bad = res.verification.unverified if res.verification else []
+    detail = (f"план получен: блоков {len(res.widgets)}, инсайтов {len(res.plan['insights'])}, чисел без источника {len(bad)}; "
+              f"{res.usage.total_tokens} токенов, {res.latency_ms / 1000:.1f} с")
+    if bad:
+        return Result(WARN, title, detail, "Такие числа подсвечиваются в дашборде и не попадают в контекст чата. Если их много, "
+                      "посмотрите, какие именно (шапка дашборда), и уточните промпт дашборда (agent/prompts.py).")
+    return Result(OK, title, detail)
+
+
 # ---------- запуск ----------
 
 
@@ -272,6 +299,7 @@ def run(offline: bool = False, out=print) -> list[Result]:
         return results
     if add(check_chat(llm)).status != FAIL:
         add(check_function_calling(llm))
+        add(check_dashboard(llm))
     return results
 
 

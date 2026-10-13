@@ -9,6 +9,8 @@ from gigachat.exceptions import AuthenticationError, RateLimitError
 
 import check_gigachat as cg
 from agent.llm import FunctionCall, GigaChatConfig, LLMError, LLMResponse, Usage
+from agent.prompts import DIGEST_OPEN
+from agent.stub_llm import ScriptedLLM
 
 
 @pytest.fixture
@@ -37,14 +39,17 @@ class FakeSDK:
 
 
 class FakeLLM:
-    def __init__(self, sdk=None, chat_exc=None, calls_function=True):
+    def __init__(self, sdk=None, chat_exc=None, calls_function=True, dashboard=False):
         self.config = GigaChatConfig.from_env()
         self._client = sdk or FakeSDK()
-        self.chat_exc, self.calls_function = chat_exc, calls_function
+        self.chat_exc, self.calls_function, self.dashboard = chat_exc, calls_function, dashboard
+        self.name = "fake"
 
     def chat(self, messages, functions=None, **kwargs):
         if self.chat_exc:
             raise self.chat_exc
+        if self.dashboard and DIGEST_OPEN in messages[-1]["content"]:  # запрос плана дашборда: отвечает как заглушка
+            return ScriptedLLM().chat(messages, None)
         if functions:
             call = FunctionCall("get_change", {"metric": "NPS"}) if self.calls_function else None
             return LLMResponse(content="" if call else "Отклонение небольшое", function_call=call, usage=Usage(5, 5, 10))
@@ -197,6 +202,24 @@ def test_chat_failure_is_explained(env):
 def test_model_that_ignores_functions_gets_a_warning_not_a_failure(env):
     results, text = run(env, FakeLLM(calls_function=False))
     assert statuses(results)["Вызов функций"] == cg.WARN and "GigaChat-2-Max" in text
+
+
+def test_dashboard_step_passes_when_the_model_returns_a_good_plan(env):
+    results, text = run(env, FakeLLM(dashboard=True))
+    step = next(r for r in results if r.title.startswith("План дашборда"))
+    assert step.status == cg.OK and "блоков 12" in step.detail and "чисел без источника 0" in step.detail, text
+
+
+def test_dashboard_step_warns_but_does_not_fail_when_the_plan_is_unusable(env):
+    results, text = run(env)  # модель отвечает «ок» на всё: плана нет
+    step = next(r for r in results if r.title.startswith("План дашборда"))
+    assert step.status == cg.WARN and "по умолчанию" in step.detail + step.fix and "GigaChat-2-Max" in step.fix, text
+    assert not any(r.status == cg.FAIL for r in results)
+
+
+def test_dashboard_step_is_skipped_when_the_chat_check_fails(env):
+    results, _ = run(env, FakeLLM(chat_exc=LLMError("Закончился пакет токенов или нужна оплата (402).")))
+    assert not any(r.title.startswith("План дашборда") for r in results)
 
 
 # ---------- код возврата ----------
