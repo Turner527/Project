@@ -3,6 +3,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 
 from pydantic import ValidationError
 
@@ -15,6 +16,14 @@ from tools import datastore
 
 MAX_STEPS = 6
 FINAL_MAX_TOKENS = 2000
+
+
+@dataclass
+class DashboardContext:
+    """Выводы построенного дашборда: text попадает в системный промпт, sources — числа дашборда для верификатора."""
+
+    text: str
+    sources: object
 
 
 @dataclass
@@ -76,7 +85,7 @@ class Agent:
         self.adapter = adapter
         self.max_steps = max_steps
 
-    def run(self, question: str) -> AgentResult:
+    def run(self, question: str, context: DashboardContext | None = None) -> AgentResult:
         started = time.perf_counter()
         calls: list[ToolCallRecord] = []
         usage, steps, raw = Usage(), 0, ""
@@ -85,7 +94,7 @@ class Agent:
         try:
             functions = self.adapter.functions
             messages = [
-                {"role": "system", "content": build_system_prompt(datastore.get_table())},
+                {"role": "system", "content": build_system_prompt(datastore.get_table(), context.text if context else None)},
                 {"role": "user", "content": question},
             ]
             for _ in range(self.max_steps):
@@ -116,7 +125,9 @@ class Agent:
 
         verification = None
         if memo is not None:
-            verification = verify(memo.texts(), calls, question, memo.used_tool_calls)
+            # числа дашборда посчитаны кодом, поэтому в ответе после дашборда их можно повторять: это ещё один источник
+            sources = calls + ([SimpleNamespace(call_id="дашборд", result=context.sources)] if context else [])
+            verification = verify(memo.texts(), sources, question, memo.used_tool_calls)
             real = {c.call_id for c in calls}
             cited = [c for c in memo.used_tool_calls if c in real]
             derived = [cid for ids in verification.sources.values() for cid in ids]

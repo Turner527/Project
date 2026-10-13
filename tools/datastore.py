@@ -5,6 +5,7 @@
 Загруженный отчёт бывает двух видов: стратегический xlsx (листы goals/facts/links) или плоская таблица
 со спецификацией ролей столбцов (active.spec.json + active.data.xlsx|csv).
 """
+import hashlib
 import json
 import os
 import re
@@ -70,7 +71,8 @@ def _stat(path: Path) -> tuple:
     return str(path), st.st_mtime_ns, st.st_size
 
 
-def get_table() -> Table:
+def snapshot() -> tuple[Table, str]:
+    """Активный отчёт и его отпечаток из одного и того же состояния файлов."""
     kind, path = active_source()
     key = _stat(path)
     if kind == "flat":
@@ -79,8 +81,32 @@ def get_table() -> Table:
     with _lock:
         if _cache.get("key") != key:
             _cache["table"] = _load_flat(path) if kind == "flat" else to_table(load_dataset(path, name=path.name), path.name)
+            _cache["fingerprint"] = _content_hash(kind, path)
             _cache["key"] = key
-        return _cache["table"]
+        return _cache["table"], _cache["fingerprint"]
+
+
+def get_table() -> Table:
+    return snapshot()[0]
+
+
+def _content_hash(kind: str, path: Path) -> str:
+    """Хеш содержимого отчёта: данные и роли столбцов (для плоского) или книга целиком (для стратегического)."""
+    digest = hashlib.sha1()
+    if kind == "flat":
+        meta = json.loads(path.read_text("utf-8"))
+        roles = {"filename": meta.get("filename"), "spec": meta["spec"]}
+        digest.update(json.dumps(roles, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+        digest.update((path.parent / meta["data_file"]).read_bytes())
+    else:
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
+
+
+def fingerprint() -> str:
+    """Отпечаток активного отчёта по его содержимому: меняется, когда меняются данные или роли столбцов. По нему
+    дашборд привязан к отчёту; тот же отчёт, загруженный заново, даёт тот же отпечаток и находит свой дашборд."""
+    return snapshot()[1]
 
 
 def describe() -> dict:

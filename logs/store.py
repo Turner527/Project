@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS requests (
 )
 """
 STATUS_ERROR = "ошибка"
+DASHBOARD_PREFIX = "[дашборд] "  # так построения дашбордов отличаются от вопросов в журнале
 
 
 def db_path() -> Path:
@@ -57,7 +58,13 @@ class LogStore:
 
     def log_request(self, result, client_id: str | None = None) -> str:
         """result — AgentResult. Возвращает id записи (по нему потом приходит оценка пользователя)."""
-        data = result.to_dict()
+        return self._insert(result.to_dict(), client_id)
+
+    def log_dashboard(self, result, client_id: str | None = None) -> str:
+        """result — DashboardResult: построение дашборда пишется в тот же журнал, чтобы работали оценки «полезно»."""
+        return self._insert(result.log_view(), client_id)
+
+    def _insert(self, data: dict, client_id: str | None) -> str:
         ver = data["verification"]
         request_id = uuid.uuid4().hex
         with closing(self._conn()) as conn, conn:

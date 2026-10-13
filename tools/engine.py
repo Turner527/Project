@@ -35,6 +35,7 @@ MIN_COVERAGE = 0.9  # доля периодов, которые должны п�
 MIN_SECOND_SHARE = 10.0  # сценарий «два значения» строится, если второе даёт не меньше 10% изменения
 MAX_DRILL_VALUE_SHARE = 40.0  # углубляемся в значение, если оно даёт не меньше 40% изменения
 MAX_SCAN_DIMENSIONS = 6
+MAX_POINTS_PER_CHART = 40  # ряд для графика укрупняется до такого числа точек (день → неделя → месяц …)
 # «локальные отклонения»: заметное ухудшение внутри значения измерения при нормальном итоге
 LOCAL_MIN_OWN_PCT = 10.0  # собственное изменение значения, %
 LOCAL_MIN_WEIGHT_PCT = 2.0  # доля значения в базе (в объёме для отношений), %
@@ -297,6 +298,50 @@ def compare(t: Table, m: Metric, win: Window, base: Baseline, by: str | None = N
         sign = 1 if diff >= 0 else -1
         cmp.groups = groups.iloc[np.argsort(-(groups["contrib"].to_numpy() * sign), kind="stable")]
     return cmp
+
+
+def _window_rows(t: Table, m: Metric, win: Window, where=()) -> pd.DataFrame:
+    """Строки окна для показателя; для «на конец периода» — только последний период окна."""
+    F = _rows(t, win, where)
+    if m.kind == "last" and len(F):
+        F = F[F["_p"] == F["_p"].max()]
+    if F.empty:
+        raise ToolError("В выбранном периоде (с учётом фильтров) нет данных.")
+    return F
+
+
+def value_only(t: Table, m: Metric, win: Window, where=()) -> float:
+    """Значение показателя за окно без сравнения: для отчётов без плана и без прошлых периодов."""
+    F = _window_rows(t, m, win, where)
+    n = float(F[m.N].sum())
+    if m.kind in ("mean", "ratio"):
+        d = float(F[m.D].sum())
+        if not d:
+            raise ToolError("Знаменатель показателя равен нулю: отношение не определено.")
+        return m.scale * n / d
+    return m.scale * n
+
+
+def structure(t: Table, m: Metric, win: Window, by: str, where=(), top: int = 8) -> list[dict]:
+    """Из чего состоит показатель: значение и доля каждого значения измерения, без сравнения с базой.
+    Доля — в сумме модулей значений (для отношений — в объёме, то есть в знаменателе)."""
+    F = _window_rows(t, m, win, where)
+    ratio = m.kind in ("mean", "ratio")
+    g = F.groupby(by, sort=False)[[m.N] + ([m.D] if ratio else [])].sum()
+    if ratio:
+        value = m.scale * g[m.N] / g[m.D].replace(0, np.nan)
+        weight = g[m.D]
+    else:
+        value = m.scale * g[m.N]
+        weight = value.abs()
+    total = float(weight.sum())
+    order = weight.sort_values(ascending=False, kind="stable").index
+    rows = [{"value": str(v), "fact": r(value[v]), "share_pct": r(weight[v] / total * 100, 1) if total else None}
+            for v in order[:top]]
+    if len(order) > top:
+        rest = weight[order[top:]]
+        rows.append({"value": f"прочие ({len(rest)})", "fact": None, "share_pct": r(float(rest.sum()) / total * 100, 1) if total else None})
+    return rows
 
 
 def group_rows(cmp: Comparison, top: int, dimension: str | None = None) -> list[dict]:
@@ -646,5 +691,6 @@ def suggest_questions(t: Table) -> list[str]:
 
 __all__ = ["ToolError", "Window", "Baseline", "Comparison", "resolve_window", "resolve_baseline", "compare", "r",
            "group_rows", "trailing_run", "scan_dimensions", "local_deviations", "drill_down", "scenarios", "related",
+           "value_only", "structure",
            "resolve_where",
            "find_metric", "top_findings", "suggest_questions"]

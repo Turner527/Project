@@ -10,8 +10,9 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
+from agent.dashboard import DashboardAgent, context_text
 from agent.llm import ConfigError, LLMClient, LLMError, load_env, make_llm
-from agent.loop import Agent
+from agent.loop import Agent, DashboardContext
 from agent.prompts import PROMPT_VERSION
 from agent.tool_adapter import ToolAdapter, make_adapter
 from app import connect as connect_mod
@@ -19,7 +20,7 @@ from data.profile import profile
 from data.readers import read_file
 from data.validation import WorkbookError, check_zip_size
 from logs.store import STATUS_ERROR, LogStore
-from tools import datastore
+from tools import dashboard_store, datastore
 from tools.engine import suggest_questions
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -29,6 +30,10 @@ XLSX_MAGIC = b"PK\x03\x04"  # xlsx — это zip-архив
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
+    client_id: str | None = Field(default=None, max_length=64)
+
+
+class DashboardRequest(BaseModel):
     client_id: str | None = Field(default=None, max_length=64)
 
 
@@ -91,18 +96,38 @@ def create_app(
             "prompt_version": PROMPT_VERSION,
             "dataset": datastore.describe(),
             "questions": suggest_questions(datastore.get_table()),
+            "dashboard": _dashboard_brief(dashboard_store.current()),
         }
 
     @app.post("/api/ask")
     def ask(req: AskRequest) -> dict:
         if state["llm"] is None:
             raise HTTPException(503, state["error"] or "Языковая модель не настроена.")
-        result = Agent(state["llm"], adapter).run(req.question.strip())
+        result = Agent(state["llm"], adapter).run(req.question.strip(), _dashboard_context(dashboard_store.current()))
         request_id = store.log_request(result, req.client_id)
         data = result.to_dict()
         data["request_id"] = request_id
         data["status"] = result.verification.status if result.verification else STATUS_ERROR
         return data
+
+    @app.post("/api/dashboard")
+    def build_dashboard(req: DashboardRequest = DashboardRequest()) -> dict:
+        """Отправляет сводку активного отчёта в модель, строит дашборд по её рекомендациям и сохраняет его."""
+        if state["llm"] is None:
+            raise HTTPException(503, state["error"] or "Языковая модель не настроена.")
+        table, fingerprint = datastore.snapshot()
+        result = DashboardAgent(state["llm"]).run(table)
+        result.fingerprint = fingerprint
+        result.request_id = store.log_dashboard(result, req.client_id)
+        payload = result.to_dict()
+        if result.plan is not None and result.widgets:
+            dashboard_store.save(payload)
+        return payload
+
+    @app.get("/api/dashboard")
+    def get_dashboard() -> dict:
+        """Дашборд активного отчёта, если он уже построен по этим данным."""
+        return {"dashboard": dashboard_store.current()}
 
     @app.post("/api/feedback")
     def feedback(req: FeedbackRequest) -> dict:
@@ -181,6 +206,22 @@ def create_app(
         return JSONResponse({"ok": True, "dataset": datastore.reset(), "questions": suggest_questions(datastore.get_table())})
 
     return app
+
+
+def _dashboard_brief(payload: dict | None) -> dict | None:
+    if not payload or not payload.get("plan"):
+        return None
+    return {"title": payload["plan"]["title"], "created_at": payload["created_at"], "plan_source": payload["plan_source"],
+            "widgets": len(payload["widgets"])}
+
+
+def _dashboard_context(payload: dict | None) -> DashboardContext | None:
+    """Выводы дашборда для чата: после дашборда вопросы задаются с учётом его инсайтов, их числа проверены."""
+    if not payload or not payload.get("plan"):
+        return None
+    sources = {"сводка": payload["sent_to_model"]["digest"], "блоки": payload["widgets"]}
+    unverified = {u["field"] for u in ((payload.get("verification") or {}).get("unverified") or [])}
+    return DashboardContext(context_text(payload["plan"], unverified=unverified), sources)
 
 
 def _is_strategic(content: bytes) -> bool:

@@ -11,7 +11,7 @@ from contextlib import closing
 from pathlib import Path
 
 from agent.verifier import STATUS_OK
-from logs.store import STATUS_ERROR, db_path
+from logs.store import DASHBOARD_PREFIX, STATUS_ERROR, db_path
 
 
 def _normalize(question: str) -> str:
@@ -21,7 +21,9 @@ def _normalize(question: str) -> str:
 def summarize(path: str | Path | None = None, top: int = 5) -> dict:
     with closing(sqlite3.connect(path or db_path())) as conn:
         conn.row_factory = sqlite3.Row
-        rows = [dict(r) for r in conn.execute("SELECT * FROM requests ORDER BY ts")]
+        everything = [dict(r) for r in conn.execute("SELECT * FROM requests ORDER BY ts")]
+    dashboards = [r for r in everything if r["question"].startswith(DASHBOARD_PREFIX)]
+    rows = [r for r in everything if not r["question"].startswith(DASHBOARD_PREFIX)]  # вопросы; дашборды считаются отдельно
 
     total = len(rows)
     errors = sum(1 for r in rows if r["verification_status"] == STATUS_ERROR)
@@ -57,6 +59,11 @@ def summarize(path: str | Path | None = None, top: int = 5) -> dict:
         "returned_other_day": sum(1 for days in by_client.values() if len(set(days)) >= 2),
         "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else None,
         "avg_tokens": round(sum(tokens) / len(tokens)) if tokens else None,
+        "dashboards": len(dashboards),
+        "dashboards_verified": sum(1 for r in dashboards if r["verification_status"] == STATUS_OK),
+        "dashboards_with_model_error": sum(1 for r in dashboards if r["error"]),
+        "dashboards_rated": sum(1 for r in dashboards if r["rating"] is not None),
+        "dashboards_useful": sum(1 for r in dashboards if r["rating"] == 1),
     }
 
 
@@ -81,6 +88,11 @@ def format_summary(s: dict) -> str:
         "Самые частые вопросы:",
     ]
     lines += [f"  {n}× {q}" for q, n in s["top_questions"]] or ["  пока нет данных"]
+    if s["dashboards"]:
+        lines += ["", "Дашборды:",
+                  f"  построено: {s['dashboards']}, из них со статусом «проверен»: {s['dashboards_verified']}, "
+                  f"с ошибкой или планом по умолчанию: {s['dashboards_with_model_error']}",
+                  f"  оценок: {s['dashboards_rated']}, из них «полезно»: {s['dashboards_useful']}"]
     return "\n".join(lines)
 
 

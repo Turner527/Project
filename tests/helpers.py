@@ -99,3 +99,29 @@ def xlsx_book(sheets: dict[str, list[list]], formats: dict | None = None) -> byt
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+# ---------- план дашборда, как его мог бы вернуть GigaChat (под образец marketing) ----------
+
+MODEL_PLAN = {
+    "title": "Маркетинг: расходы и конверсия",
+    "summary": "Расходы выросли, конверсия в лиды упала; изменение сосредоточено в канале «Поиск».",
+    "widgets": [
+        {"id": "w1", "type": "kpi", "metric": "Расходы", "title": "Расходы", "note": "К предыдущему периоду", "baseline": "auto"},
+        {"id": "w2", "type": "trend", "metric": "Расходы", "title": "Динамика расходов", "note": "Линии по каналам",
+         "dimension": "Канал"},
+        {"id": "w3", "type": "breakdown", "metric": "Конверсия в лиды", "dimension": "Канал", "title": "Конверсия по каналам",
+         "note": "Вклад каналов"},
+    ],
+    "insights": [
+        {"title": "Поиск тянет расходы вверх", "text": "Расходы выросли на 10,9%: основной вклад даёт канал «Поиск».",
+         "severity": "problem", "widgets": ["w1", "w2"]},
+        {"title": "Конверсия просела", "text": "Конверсия в лиды упала в канале «Поиск».", "severity": "risk", "widgets": ["w3"]},
+    ],
+    "next_steps": ["Проверить ставки в канале «Поиск»."],
+    "questions": ["Что с конверсией в «Поиске»?"],
+}
+
+
+def plan_json(**changes):
+    return json.dumps({**MODEL_PLAN, **changes}, ensure_ascii=False)

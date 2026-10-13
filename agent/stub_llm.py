@@ -8,33 +8,15 @@ import json
 import re
 
 from agent.llm import TEMPERATURE, FunctionCall, LLMResponse, Usage
+from agent.prompts import CONTEXT_HEADER, DIGEST_CLOSE, DIGEST_OPEN
+from tools import dashboard, fmt
 
 _WORD_NUMBERS = {"два": 2, "две": 2, "три": 3, "четыре": 4, "пять": 5, "шесть": 6, "семь": 7, "восемь": 8,
                  "девять": 9, "десять": 10, "двенадцать": 12}
 _NUM = r"(\d+|" + "|".join(_WORD_NUMBERS) + r")"
-_MINUS = "−"
 
 
-def _fmt(x, signed: bool = False) -> str:
-    """Число в русской записи с теми же цифрами, что в результате инструмента (знак — для наглядности).
-    Крупные числа разбиваются на разряды неразрывным пробелом: «2 819 730»."""
-    if x is None:
-        return "н/д"
-    a = abs(x)
-    if float(a).is_integer() and a >= 1000:
-        text = f"{int(a):,}".replace(",", "\u00a0")
-    else:
-        whole, _, frac = str(a).partition(".")
-        whole = f"{int(whole):,}".replace(",", "\u00a0") if len(whole) > 4 else whole
-        text = whole + ("," + frac if frac else "")
-    if x < 0:
-        return f"{_MINUS}{text}"
-    return f"+{text}" if signed and x > 0 else text
-
-
-def _u(unit: str) -> str:
-    """Единица с пробелом перед ней («5 мин»), проценты слитно («9,06%»), без единицы — пустая строка."""
-    return "" if not unit else unit if unit == "%" else f" {unit}"
+_fmt, _u, _dim = fmt.num, fmt.unit, fmt.dim_word
 
 
 def _n(word: str) -> int:
@@ -58,9 +40,24 @@ def _period_args(question: str) -> dict:
     return {}
 
 
-def _dim(name: str) -> str:
-    """Название измерения в тексте: «Канал» -> «канал», но «CRM» и «ИП» остаются как есть."""
-    return name.lower() if name[1:].islower() else name
+_STRATEGIC = re.compile(r"в первую очередь|приоритет|стратег|риск|как распредел|стоит ли|не хватает|каких данных|"
+                        r"в каком порядке|что делать дальше|рекомендуе", re.I)
+
+
+def _is_strategic(question: str) -> bool:
+    return bool(_STRATEGIC.search(question))
+
+
+def _dashboard_context(messages: list) -> dict | None:
+    """Выводы дашборда из системного промпта: инсайты (важность, заголовок, текст) и рекомендованные шаги."""
+    system = next((m["content"] for m in messages if m["role"] == "system"), "")
+    if CONTEXT_HEADER not in system:
+        return None
+    block = system.split(CONTEXT_HEADER, 1)[1]
+    insights = [{"severity": a, "title": b, "text": c} for a, b, c in re.findall(r"^- \[([^\]]+)\] (.*?) \| (.*)$", block, re.M)]
+    steps_line = next((ln for ln in block.splitlines() if ln.startswith("Рекомендованные шаги:")), "")
+    steps = [x.strip() for x in re.split(r"\s*\d+\)\s+", steps_line.split(":", 1)[1])[1:]] if steps_line else []
+    return {"insights": insights, "steps": steps} if insights else None
 
 
 def _scoped(question: str, value: str) -> bool:
@@ -76,18 +73,30 @@ class ScriptedLLM:
 
     def chat(self, messages, functions=None, *, function_call="auto", temperature=TEMPERATURE, max_tokens=None):
         question = next(m["content"] for m in messages if m["role"] == "user")
+        if DIGEST_OPEN in question:  # запрос плана дашборда: сводка отчёта между метками
+            return self._dashboard(messages, question)
         results = [(m["name"], json.loads(m["content"])) for m in messages if m["role"] == "function"]
+        context = _dashboard_context(messages)
+        strategic = context is not None and _is_strategic(question)
         if function_call == "none":
-            content = json.dumps(self._memo(results), ensure_ascii=False)
+            memo = self._strategic_memo(question, context) if strategic else self._memo(results)
+            content = json.dumps(memo, ensure_ascii=False)
             return LLMResponse(content=content, usage=self._usage(messages, content), finish_reason="stop")
-        call = self._next_call(question, results)
+        if strategic:  # стратегический вопрос после дашборда отвечается по его выводам, инструменты не нужны
+            return LLMResponse(content="Данных достаточно.", usage=self._usage(messages, ""), finish_reason="stop")
+        call = self._next_call(question, results, context)
         usage = self._usage(messages, json.dumps(call.__dict__, ensure_ascii=False) if call else "")
         if call is None:
             return LLMResponse(content="Данных достаточно.", usage=usage, finish_reason="stop")
         return LLMResponse(function_call=call, usage=usage, finish_reason="function_call")
 
     # --- выбор вызова ---
-    def _next_call(self, question: str, results: list) -> FunctionCall | None:
+    def _dashboard(self, messages: list, question: str) -> LLMResponse:
+        raw = question.split(DIGEST_OPEN, 1)[1].rsplit(DIGEST_CLOSE, 1)[0]
+        content = json.dumps(dashboard.fallback_plan(json.loads(raw)), ensure_ascii=False)
+        return LLMResponse(content=content, usage=self._usage(messages, content), finish_reason="stop")
+
+    def _next_call(self, question: str, results: list, context: dict | None = None) -> FunctionCall | None:
         if not results:
             return FunctionCall("find_metrics", {"query": question})
         name, data = results[-1]
@@ -101,6 +110,8 @@ class ScriptedLLM:
             metric = goal_hits[0]["metrics"][0]["metric"]  # главный показатель цели — первый в списке
         elif metric_hits:
             metric = metric_hits[0]["metric"]
+        if metric is None and context:  # вопрос про «этот канал» без названия показателя — берём главную проблему дашборда
+            metric = next((i["title"].split(":")[0] for i in context["insights"] if i["severity"] in ("проблема", "риск")), None)
         if metric is None:
             return None
         args = {"metric": metric, **_period_args(question)}
@@ -110,6 +121,36 @@ class ScriptedLLM:
         return FunctionCall("diagnose_change", args)
 
     # --- сборка записки ---
+    def _strategic_memo(self, question: str, context: dict) -> dict:
+        """Ответ на стратегический вопрос по выводам дашборда: только его формулировки и числа, без прогнозов."""
+        insights, steps = context["insights"], context["steps"]
+        quoted = re.findall(r"«([^»]+)»", question)
+        related = [i for i in insights if any(q in i["title"] or q in i["text"] for q in quoted)] or insights[:1]
+        if re.search(r"не хватает|каких данных", question, re.I):
+            summary = ("По данным дашборда видно, где и насколько изменились показатели, но не почему: причин вне отчёта "
+                       "(решения, акции, поведение клиентов, сбои) в данных нет.")
+            checks = ["Собрать сведения о решениях, акциях и изменениях условий за период ухудшения.",
+                      "Уточнить у владельцев показателей, что менялось в процессах."]
+            root = "Причины вне отчёта в данных отсутствуют"
+        elif re.search(r"риск", question, re.I):
+            summary = ("Если ничего не менять, ухудшение сохранится на достигнутом уровне; прогноз не строился, это допущение. "
+                       + " ".join(f"{i['title']}: {i['text']}" for i in related[:2]))
+            checks = steps[:2] or ["Проверить причины ухудшения с владельцами показателей."]
+            root = f"Риск: {related[0]['title']}"
+        else:
+            order = [i for i in insights if i["severity"] in ("проблема", "риск")] or insights
+            summary = ("Приоритеты по выводам дашборда: " + "; ".join(f"{n}) {i['title']}" for n, i in enumerate(order[:3], 1))
+                       + ". " + order[0]["text"])
+            checks = steps[:3] or ["Проверить причины ухудшения с владельцами показателей."]
+            root = f"Первый приоритет: {order[0]['title']}"
+        scenarios = [{"name": f"Шаг {n}", "description": step,
+                      "effect_estimate": "Количественная оценка недоступна: эффект зависит от причин вне данных.",
+                      "assumptions": ["Шаг следует из выводов дашборда; причину нужно подтвердить владельцем показателя."]}
+                     for n, step in enumerate(steps[:3], 1)]
+        return {"diagnosis": {"summary": summary, "root_cause": root, "key_segments": []}, "scenarios": scenarios,
+                "manual_checks": checks + ["Проверить гипотезы о причинах вне отчёта: это предположения, данных для них нет."],
+                "used_tool_calls": []}
+
     def _memo(self, results: list) -> dict:
         ids = [d["call_id"] for _, d in results if "call_id" in d]
         diag = next((d for n, d in reversed(results) if n == "diagnose_change" and "error" not in d), None)
