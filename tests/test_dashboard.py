@@ -118,7 +118,7 @@ def test_plan_texts_cover_every_text_the_user_will_read():
 def test_digest_of_a_flat_report_describes_the_findings(marketing):
     d = D.build_digest(marketing)
     rep = d["report"]
-    assert (rep["source"], rep["rows"], rep["grain"], rep["baseline"]) == ("marketing.xlsx", 488, "day", "предыдущий период")
+    assert (rep["source"], rep["rows"], rep["grain"], rep["baseline"]) == ("отчёт.xlsx", 488, "day", "предыдущий период")  # имя файла скрыто подписью
     assert rep["analysis_window"] == {"from": "2026-09-01", "to": "2026-09-30", "periods": 30}
     names = [m["name"] for m in d["metrics"]]
     assert names[: len(d["highlights"]["significant_deterioration"])] == d["highlights"]["significant_deterioration"]

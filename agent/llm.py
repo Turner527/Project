@@ -12,6 +12,8 @@ from typing import Protocol
 
 from dotenv import load_dotenv
 
+from tools.privacy import force_consent
+
 ROOT = Path(__file__).resolve().parent.parent
 # «Около нуля»: чистый 0 в некоторых API трактуется как «значение по умолчанию», поэтому 0.01
 TEMPERATURE = 0.01
@@ -61,7 +63,10 @@ class LLMResponse:
 
 
 class LLMClient(Protocol):
-    """Сообщения — словари {role, content, [name], [function_call], [functions_state_id]}."""
+    """Сообщения — словари {role, content, [name], [function_call], [functions_state_id]}.
+
+    Необязательный атрибут sends_data_out (по умолчанию False): True, если клиент отправляет данные за пределы компьютера
+    (GigaChat). Для таких клиентов перед первой отправкой пользователь подтверждает сводку (см. app/consent.py)."""
 
     name: str
 
@@ -74,6 +79,12 @@ class LLMClient(Protocol):
         temperature: float = TEMPERATURE,
         max_tokens: int | None = None,
     ) -> LLMResponse: ...
+
+
+def llm_sends_data_out(llm) -> bool:
+    """Уходят ли данные отчёта с этого компьютера. Заглушка и тестовые клиенты ничего не отправляют; для проверки
+    интерфейса PRISMA_FORCE_CONSENT=1 заставляет считать, что отправляют все."""
+    return llm is not None and (force_consent() or bool(getattr(llm, "sends_data_out", False)))
 
 
 def load_env() -> None:
@@ -210,6 +221,8 @@ def _sdk_message(m: dict) -> dict:
 
 class GigaChatLLM:
     """Обёртка над официальным пакетом gigachat. Проверка SSL включена всегда."""
+
+    sends_data_out = True  # запросы уходят в сеть GigaChat: перед первой отправкой нужно согласие пользователя
 
     def __init__(self, config: GigaChatConfig | None = None, client=None):
         self.config = config or GigaChatConfig.from_env()

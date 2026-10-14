@@ -215,7 +215,8 @@ def test_system_prompt_catalog_describes_the_active_flat_report(adapter, tmp_pat
     llm = FakeLLM([text("ок"), text(memo_json())])
     Agent(llm, adapter).run("вопрос")
     system = llm.calls[0]["messages"][0]["content"]
-    assert system.startswith(SYSTEM_PROMPT) and "marketing.xlsx" in system
+    assert system.startswith(SYSTEM_PROMPT) and "источник «отчёт.xlsx»" in system  # настоящее имя файла в модель не уходит
+    assert "marketing" not in system
     for fragment in ("2026-08-01", "2026-09-30", "дни", "CTR", "Конверсия в лиды", "Канал", "Поиск", "Кампания"):
         assert fragment in system, fragment
     assert "Молодёжь" not in system and "2025-04" not in system  # справка о демо-данных не просочилась

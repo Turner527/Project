@@ -280,6 +280,17 @@
   .opts .reason { color: var(--faint); font-size: 13px; align-self: center; }
   .opts .tag { font-size: 12.5px; color: var(--on-soft); background: var(--soft); border: 1px solid var(--soft-line); border-radius: 999px; padding: 2px 10px; align-self: center; }
   .keep { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .opts .note-warn, .ratio-row .note-warn { color: var(--warn); font-size: 13px; }
+  .opts .note-warn { align-self: center; }
+  .col-row.excl { background: var(--warn-bg); }
+  .col-row.excl.off { opacity: .9; }
+  .col-flags { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 6px; align-items: center; }
+  .flag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; line-height: 1.3; font-weight: 600; border-radius: 10px; padding: 3px 10px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--muted); }
+  .flag.warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-line); }
+  .excl-box { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; font-size: 13px; line-height: 1.35; color: var(--ink); cursor: pointer; }
+  .excl-box input { margin-top: 1px; flex: none; }
+  .excl-box.locked { color: var(--faint); cursor: default; }
+  .excl-hint { display: block; margin-top: 3px; color: var(--faint); font-size: 12px; }
   .keep label { display: inline-flex; flex-direction: row; gap: 7px; align-items: center; font-size: 14px; color: var(--ink); }
   .ratio-row { display: grid; grid-template-columns: 26px minmax(150px, 1fr) minmax(190px, 1.5fr) 88px 190px; gap: 10px 14px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); }
   .ratio-row .formula { color: var(--muted); font-size: 13.5px; overflow-wrap: anywhere; }
@@ -296,6 +307,21 @@
   .qlist button { text-align: left; font: inherit; font-size: 14.5px; color: var(--on-soft); background: var(--soft); border: 1px solid var(--soft-line); border-radius: 14px; padding: 9px 14px; cursor: pointer; }
   .qlist button:hover { border-color: var(--brand-2); }
   .scenario-card.q h4 { font-size: 18px; }
+
+  /* ---------- «Что уйдёт в GigaChat»: показ сводки и согласие перед первой отправкой ---------- */
+  .dialog.consent { max-width: 860px; display: flex; flex-direction: column; overflow: hidden; }
+  .consent .cbody { overflow: auto; min-height: 0; flex: 1 1 auto; padding-right: 6px; }
+  .consent .about li { color: var(--muted); font-size: 14.5px; margin-bottom: 6px; }
+  .consent .block { padding: 12px 16px; margin: 12px 0; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); }
+  .consent .block h5 { margin: 0 0 8px; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .consent .block .kv { margin: 0 0 10px; }
+  .consent .block .chips { margin-top: 0; }
+  .consent .block p { margin: 6px 0; font-size: 14px; }
+  .consent .dim-line { margin: 4px 0; font-size: 14.5px; color: var(--ink); overflow-wrap: anywhere; }
+  .consent .chip.off { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-line); }
+  .consent details { margin-top: 12px; padding-top: 12px; }
+  .consent pre { max-height: 260px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .consent .actions { flex: none; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
   @media (max-width: 800px) {
     .col-row, .ratio-row { grid-template-columns: minmax(0, 1fr); }
     .col-row.head, .ratio-row.head { display: none; }
@@ -1107,6 +1133,7 @@ function addUserMessage(text) {
   const node = el("div", { class: "msg user" }, el("div", { class: "bubble" }, el("small", {}, "Вопрос"), text));
   $("chat").append(node);
   node.scrollIntoView({ block: "start", behavior: "smooth" });
+  return node;
 }
 
 function addPending() {
@@ -1120,17 +1147,31 @@ function addPending() {
 }
 
 let busy = false;
+/* Вопрос уходит в модель: до первой отправки нужно увидеть, что именно уйдёт, и подтвердить */
+function askConsent(action, question) {
+  showPreview(action, () => { if (question && !$("question").value) { $("question").value = question; autosize(); } });
+}
+
 async function ask(question) {
   if (busy) return;
+  if (status && status.consent_required) { askConsent(() => ask(question), question); return; }
   busy = true;
   if (!chatting) setChatting(true);
-  addUserMessage(question);
+  const userNode = addUserMessage(question);
   $("send").disabled = true;
   const pending = addPending();
   try {
     const res = await api("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question, client_id: clientId() }) });
     pending.stop();
+    if (res.status === 428) { // сервер потребовал согласия (страница об этом ещё не знала): ничего не отправлено
+      pending.card.remove();
+      userNode.remove();
+      if (!$("chat").children.length && !document.body.classList.contains("has-dash")) setChatting(false);
+      await refreshStatus();
+      askConsent(() => ask(question), question);
+      return;
+    }
     let node;
     if (!res.ok) {
       const detail = res.body && res.body.detail;
@@ -1162,7 +1203,15 @@ function openDialog(kind, title, ...body) {
     el("div", { class: "actions" }, el("button", { class: "btn primary sm", type: "button", onclick: closeDialog }, "Закрыть")));
   $("overlay").classList.add("open");
 }
-function closeDialog() { $("overlay").classList.remove("open"); }
+let previewSeq = 0; // номер показа сводки: окно закрыли, пока она готовилась, — ответ сервера уже не нужен
+let consentCancel = null; // что сделать, если окно «Что уйдёт в GigaChat» закрыли, не отправив
+function closeDialog() {
+  previewSeq += 1;
+  const hook = consentCancel;
+  consentCancel = null;
+  $("overlay").classList.remove("open");
+  if (hook) hook();
+}
 
 function showHow() {
   openDialog("info", "Как это работает",
@@ -1174,6 +1223,92 @@ function showHow() {
       el("li", {}, el("b", {}, "Все числа считает код"), ": изменение к плану, прошлому периоду или году назад; вклад каждого значения разреза; связанные показатели; арифметика сценариев."),
       el("li", {}, el("b", {}, "Верификатор сверяет тексты"), ": каждое число в ответе и в инсайтах должно быть в результатах расчётов, иначе оно подсвечивается.")),
     el("p", {}, "Под каждым ответом блок «Как получен ответ», а под дашбордом блок «Как построен дашборд» показывают, что ушло в модель и что вернулось."));
+}
+
+/* ---------- «Что уйдёт в GigaChat»: показ сводки и согласие перед первой отправкой ---------- */
+async function showPreview(onConfirm, onCancel, note) {
+  const mine = ++previewSeq;
+  consentCancel = onCancel || null;
+  const dialog = $("dialog");
+  dialog.className = "dialog consent";
+  dialog.replaceChildren(el("h3", {}, "Что уйдёт в GigaChat"), el("p", {}, "Готовлю сводку… Это занимает несколько секунд."));
+  $("overlay").classList.add("open");
+  let res;
+  try { res = await api("/api/preview"); } catch (e) { res = { ok: false }; }
+  if (mine !== previewSeq) return;
+  if (!res.ok) {
+    openDialog("fail", "Не удалось подготовить сводку", el("p", {}, "Сервер не ответил или не смог собрать сводку. Ничего не отправлено."));
+    return;
+  }
+  renderPreview(res.body, onConfirm, note);
+}
+
+function renderPreview(p, onConfirm, note) {
+  let digest = null;
+  try { digest = JSON.parse(p.digest_text); } catch (e) { /* покажем только текст */ }
+  const rep = (digest && digest.report) || {};
+  const metrics = digest ? [...digest.metrics.map((m) => m.name), ...(digest.other_metrics || []).map((m) => m.name)] : [];
+  const dims = (digest && digest.dimensions) || [];
+  const kv = [
+    ["Файл", `уйдёт под именем «${p.file_name_sent_as}»`],
+    ["Показателей", String(rep.metrics_count != null ? rep.metrics_count : metrics.length)],
+    ["Разрезов", String(dims.length)],
+    ["Период", rep.period ? `${rep.period.from} – ${rep.period.to}` : "в отчёте нет дат"],
+    ["Размер сводки", `${fmt(p.stats.chars)} знаков`],
+  ];
+  const summary = el("div", { class: "block" }, el("h5", {}, "Что в сводке"),
+    el("dl", { class: "kv" }, kv.map(([k, v]) => [el("dt", {}, k), el("dd", {}, v)]).flat()),
+    metrics.length ? el("div", {}, el("h5", {}, "Показатели"), el("div", { class: "chips" }, metrics.map((m) => el("span", { class: "chip" }, m)))) : null,
+    dims.length ? el("div", { style: "margin-top:12px" }, el("h5", {}, "Разрезы и примеры значений"),
+      dims.map((d) => el("div", { class: "dim-line" }, el("b", {}, d.name), ` — значений: ${d.values_count}; например: ${(d.top_values || []).join(", ")}`))) : null);
+  const excluded = el("div", { class: "block" }, el("h5", {}, "Не отправляются"),
+    p.excluded_columns.length
+      ? el("div", { class: "chips" }, p.excluded_columns.map((n) => el("span", { class: "chip off" }, `${n} · не отправляется`)))
+      : el("p", { class: "muted" }, p.report_kind === "flat"
+        ? "Столбцов с пометкой «Не отправлять в модель» нет. Чтобы скрыть столбец, загрузите отчёт заново и отметьте его на шаге проверки ролей."
+        : "В отчёте такого формата пометить столбцы нельзя."),
+    p.excluded_columns.length ? el("p", { class: "muted" }, "Показаны только вам: в модель не уходят ни названия, ни значения этих столбцов.") : null);
+  const full = el("details", {}, el("summary", {}, "Полная сводка (JSON), как она уйдёт"));
+  full.addEventListener("toggle", () => { if (full.open && full.children.length === 1) full.append(el("pre", {}, p.digest_pretty)); });
+  const catalog = el("details", {}, el("summary", {}, "Каталог отчёта в запросах чата"),
+    el("p", { class: "hint2" }, "Этот текст добавляется к каждому вопросу в чате."), el("pre", {}, p.catalog));
+  const err = el("div", { class: "alert bad hidden" });
+  const cancel = el("button", { class: "btn", type: "button", onclick: closeDialog }, "Отмена");
+  const send = el("button", { class: "btn primary", type: "button" }, icon("send"), "Отправить");
+  send.addEventListener("click", async () => {
+    send.disabled = cancel.disabled = true;
+    let res;
+    try {
+      res = await api("/api/consent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: p.token }) });
+    } catch (e) { res = { ok: false, status: 0 }; }
+    send.disabled = cancel.disabled = false;
+    if (res.ok) {
+      consentCancel = null;
+      closeDialog();
+      await refreshStatus();
+      if (onConfirm) onConfirm();
+      return;
+    }
+    if (res.status === 409) { // сводка изменилась: показываем заново
+      await refreshStatus();
+      showPreview(onConfirm, consentCancel, (res.body && res.body.detail) || "Сводка изменилась, откройте её заново");
+      return;
+    }
+    err.textContent = (res.body && res.body.detail) || "Не удалось сохранить подтверждение. Ничего не отправлено.";
+    err.classList.remove("hidden");
+  });
+  const dialog = $("dialog");
+  dialog.className = "dialog consent";
+  dialog.replaceChildren(
+    el("h3", {}, "Что уйдёт в GigaChat"),
+    el("div", { class: "cbody" },
+      note ? el("div", { class: "alert warn" }, note) : null,
+      p.llm === "stub" ? el("div", { class: "alert warn" }, "Режим проверки: сейчас работает офлайн-заглушка, поэтому на самом деле ничего не уйдёт.") : null,
+      el("p", {}, "Вот что GigaChat получит, если вы нажмёте «Отправить». Это спрашивается один раз для каждого отчёта."),
+      el("ul", { class: "about" }, p.about.map((t) => el("li", {}, t))),
+      summary, excluded, full, catalog, err),
+    el("div", { class: "actions" }, cancel, send));
+  send.focus();
 }
 
 const KNOWN_MODELS = ["GigaChat-2", "GigaChat-2-Pro", "GigaChat-2-Max", "GigaChat-3-Ultra"];
@@ -1311,6 +1446,7 @@ function reviewState(uploadId, profile) {
     columns: profile.columns.map((c) => ({
       ...c, display: c.display || c.name, agg: c.agg || "sum", unit: c.unit || "", better: c.better || "up", scale: c.scale || 1,
       planFor: c.plan_for || "", keep: c.keep ? [...c.keep] : [],
+      excluded: false, prevRole: null, sensitive: !!c.sensitive_hint, sensitiveReason: c.sensitive_reason || "", // пометку «Не отправлять» ставит только пользователь
     })),
     ratios: profile.ratios.map((r) => ({ ...r })),
   };
@@ -1331,6 +1467,32 @@ function setRole(st, c, role) {
   if (role === "date") st.columns.forEach((o) => { if (o !== c && o.role === "date") o.role = "ignore"; }); // дата в отчёте одна
   if (role === "plan" && !c.planFor) c.planFor = guessPlanFor(st, c);
   if (role === "filter" && !c.keep.length) c.keep = [...(c.values || [])];
+}
+
+/* «Не отправлять в модель»: столбец не участвует ни в одной роли, которая доходит до модели; остаются «Не использовать» и,
+   если есть значения, «Фильтр строк» (он работает только у вас). Дату исключить нельзя. */
+function setExcluded(st, c, on) {
+  if (on) {
+    if (c.role === "date") return;
+    c.excluded = true;
+    c.prevRole = c.role;
+    if (c.role !== "filter") c.role = "ignore";
+  } else {
+    c.excluded = false;
+    if (c.prevRole && c.role === "ignore") c.role = c.prevRole; // снятие пометки возвращает прежнюю роль
+    c.prevRole = null;
+  }
+}
+
+/* Столбцы выражения («Клики» или «Доход - Расходы») и те из них, что помечены «Не отправлять» */
+function exprColumns(st, expr) {
+  const names = st.columns.map((c) => c.name);
+  if (names.includes(expr)) return [expr];
+  return String(expr || "").split(/\s+[+\-\u2212]\s+/).filter((x) => names.includes(x));
+}
+function ratioBlockers(st, r) {
+  const used = r.kind === "sum" ? exprColumns(st, r.column) : [...exprColumns(st, r.num), ...exprColumns(st, r.den)];
+  return [...new Set(used)].filter((n) => st.columns.some((c) => c.name === n && c.excluded));
 }
 
 function selectOf(options, value, onChange, attrs) {
@@ -1365,12 +1527,17 @@ function optionsFor(st, c) {
       labelled("Что лучше", selectOf(BETTER_LABEL, c.better, (v) => { c.better = v; }, { "aria-label": "Что лучше" })));
     if (c.scale === 100) box.append(el("span", { class: "tag", title: "Значения хранятся долями и показываются в процентах" }, "доли → %"));
     if (hasPlan) box.append(el("span", { class: "tag" }, "есть план"));
+    const lost = st.columns.find((o) => o.excluded && o.prevRole === "plan" && o.planFor === c.name);
+    if (lost) box.append(el("span", { class: "note-warn" }, `План «${lost.name}» не отправляется в модель: показатель без плана.`));
   } else if (c.role === "plan") {
     const metrics = st.columns.filter((o) => o.role === "metric");
     if (!metrics.length) box.append(el("span", { class: "reason" }, "Сначала отметьте показатель, к которому относится план."));
     else {
       const options = Object.fromEntries([["", "— выберите —"], ...metrics.map((m) => [m.name, m.display || m.name])]);
       box.append(labelled("План для показателя", selectOf(options, c.planFor, (v) => { c.planFor = v; }, { "aria-label": "План для показателя" })));
+      if (st.columns.some((o) => o.name === c.planFor && o.excluded)) {
+        box.append(el("span", { class: "note-warn" }, `Показатель «${c.planFor}» не отправляется в модель: выберите другой показатель или «Не использовать».`));
+      }
     }
   } else if (c.role === "filter") {
     const values = c.values || [];
@@ -1384,18 +1551,39 @@ function optionsFor(st, c) {
     box.append(el("span", { class: "reason" }, p.grain ? `Детализация: ${GRAIN_WORD[p.grain]}` : "Даты разобраны при сохранении"));
   } else if (c.role === "dimension") {
     box.append(el("span", { class: "reason" }, `Значений: ${c.n_unique}. По ним ищется, где именно произошло изменение.`));
+  } else if (c.excluded) {
+    box.append(el("span", { class: "reason" }, "Не отправляется в модель и не участвует в расчётах."
+      + (c.values && c.values.length ? " Можно выбрать «Фильтр строк»: он сработает только у вас." : "")));
   } else {
     box.append(el("span", { class: "reason" }, c.reason || "Столбец не используется"));
+  }
+  if (c.excluded && c.role === "filter") {
+    box.append(el("span", { class: "note-warn" }, "Название столбца и значения фильтра в модель не уходят: только число исключённых строк."));
   }
   return box;
 }
 
 function columnRow(st, c) {
-  const allowed = (ROLES_BY_KIND[c.kind] || ["ignore"]).filter((r) => r !== "filter" || (c.values && c.values.length));
+  const allowed = (ROLES_BY_KIND[c.kind] || ["ignore"]).filter((r) => r !== "filter" || (c.values && c.values.length))
+    .filter((r) => !c.excluded || r === "ignore" || r === "filter");
   const roles = Object.fromEntries(allowed.map((r) => [r, ROLE_LABEL[r]]));
   const sel = selectOf(roles, c.role, (v) => { setRole(st, c, v); renderReview(st); }, { class: "role", "data-role": c.role, "aria-label": `Роль столбца ${c.name}` });
-  return el("div", { class: "col-row" + (c.role === "ignore" ? " off" : "") },
-    el("div", { class: "col-name" }, el("b", {}, c.name), el("small", {}, exampleText(c))), sel, optionsFor(st, c));
+  const locked = c.role === "date";
+  const cb = el("input", { type: "checkbox", checked: c.excluded, disabled: locked, "aria-label": `Не отправлять в модель: столбец ${c.name}` });
+  cb.addEventListener("change", () => { setExcluded(st, c, cb.checked); renderReview(st); });
+  const flags = [];
+  if (c.excluded) flags.push(el("span", { class: "flag warn" }, icon("lock"), "не отправляется"));
+  else if (c.sensitive) {
+    flags.push(el("span", { class: "flag", title: c.sensitiveReason }, "возможно, персональные данные"),
+      el("button", { class: "link-btn", type: "button", title: c.sensitiveReason, onclick: () => { setExcluded(st, c, true); renderReview(st); } }, "Не отправлять"));
+  }
+  return el("div", { class: "col-row" + (c.role === "ignore" ? " off" : "") + (c.excluded ? " excl" : "") },
+    el("div", { class: "col-name" }, el("b", {}, c.name), el("small", {}, exampleText(c)),
+      flags.length ? el("div", { class: "col-flags" }, flags) : null,
+      el("label", { class: "excl-box" + (locked ? " locked" : ""), title: locked ? "Столбец с датой нельзя исключить" : "Название и значения столбца не попадут ни в сводку, ни в вопросы" },
+        cb, el("span", {}, "Не отправлять в модель")),
+      locked ? el("small", { class: "excl-hint" }, "Дату исключить нельзя: без неё нет периодов.") : null),
+    sel, optionsFor(st, c));
 }
 
 function formulaOf(r) {
@@ -1404,16 +1592,20 @@ function formulaOf(r) {
 }
 
 function ratioRow(st, r) {
-  const cb = el("input", { type: "checkbox", checked: !!r.enabled, "aria-label": `Включить ${r.name}` });
+  const blocked = ratioBlockers(st, r); // отношение по столбцу «Не отправлять» выключается само
+  const on = !!r.enabled && !blocked.length;
+  const cb = el("input", { type: "checkbox", checked: on, disabled: blocked.length > 0, "aria-label": `Включить ${r.name}` });
   cb.addEventListener("change", () => { r.enabled = cb.checked; renderReview(st); });
-  return el("div", { class: "ratio-row" + (r.enabled ? "" : " off") }, cb,
-    textInput(r.name, (v) => { r.name = v; }, "", "Название отношения"), el("span", { class: "formula" }, formulaOf(r)),
+  return el("div", { class: "ratio-row" + (on ? "" : " off") }, cb,
+    textInput(r.name, (v) => { r.name = v; }, "", "Название отношения"),
+    el("span", { class: "formula" }, formulaOf(r),
+      blocked.length ? el("div", { class: "note-warn" }, `Выключено: ${blocked.map((n) => `«${n}»`).join(", ")} не отправляется в модель.`) : null),
     textInput(r.unit, (v) => { r.unit = v; }, "w-unit", "Единица"),
     selectOf(BETTER_LABEL, r.better, (v) => { r.better = v; }, { "aria-label": "Что лучше" }));
 }
 
 function addRatioForm(st) {
-  const nums = st.columns.filter((c) => c.kind === "number");
+  const nums = st.columns.filter((c) => c.kind === "number" && !c.excluded);
   const cols = Object.fromEntries(nums.map((c) => [c.name, c.name]));
   const f = { name: "", num: nums[0] && nums[0].name, den: nums[1] && nums[1].name, scale: "1", unit: "", better: "up" };
   const err = el("span", { class: "reason", style: "color:var(--bad)" });
@@ -1455,13 +1647,13 @@ function buildSpec(st) {
     if (!c.keep.length) errors.push(`Фильтр «${c.name}»: отметьте хотя бы одно значение.`);
     return { column: c.name, values: c.keep };
   });
-  const ratios = st.ratios.filter((r) => r.enabled).map((r) => (r.kind === "sum"
+  const ratios = st.ratios.filter((r) => r.enabled && !ratioBlockers(st, r).length).map((r) => (r.kind === "sum"
     ? { name: r.name.trim(), kind: "sum", column: r.column, unit: (r.unit || "").trim(), better: r.better, scale: 1 }
     : { name: r.name.trim(), kind: "ratio", num: r.num, den: r.den, unit: (r.unit || "").trim(), better: r.better, scale: Number(r.scale) || 1 }));
   return {
     errors,
     spec: { sheet: st.profile.sheet, date: dates[0] ? dates[0].name : null, dimensions: cols.filter((c) => c.role === "dimension").map((c) => c.name),
-      metrics: [...metrics, ...ratios], filters, significant_pct: 3 },
+      metrics: [...metrics, ...ratios], filters, significant_pct: 3, excluded: cols.filter((c) => c.excluded).map((c) => c.name) },
   };
 }
 
@@ -1506,7 +1698,8 @@ function renderReview(st) {
   dialog.className = "dialog wide review";
   const meta = [`Файл «${p.filename}»`, p.sheets.length > 1 ? null : `лист «${p.sheet}»`, `${fmt(p.rows)} ${plural(p.rows, "строка", "строки", "строк")}`,
     p.period ? `${p.period.from} – ${p.period.to} (${GRAIN_WORD[p.grain]})` : "дат не найдено",
-    p.rows_excluded ? `исключено фильтром: ${fmt(p.rows_excluded)} ${plural(p.rows_excluded, "строка", "строки", "строк")}` : null].filter(Boolean).join(" · ");
+    p.rows_excluded ? `исключено фильтром: ${fmt(p.rows_excluded)} ${plural(p.rows_excluded, "строка", "строки", "строк")}` : null,
+    st.columns.some((c) => c.excluded) ? `не отправляется в модель: ${st.columns.filter((c) => c.excluded).length}` : null].filter(Boolean).join(" · ");
   const parts = [el("h3", {}, "Проверьте роли и типы столбцов"), el("p", { class: "review-meta" }, meta)];
 
   const tools = [];
@@ -1522,6 +1715,7 @@ function renderReview(st) {
       el("ul", {}, p.notes.map((t) => el("li", {}, t)))));
   }
 
+  parts.push(el("p", { class: "hint2" }, "Отметка «Не отправлять в модель» — для столбцов с персональными или коммерческими данными: их название и значения не попадут ни в сводку, ни в вопросы к GigaChat, а в расчётах они не участвуют. Такой столбец можно оставить фильтром строк: он сработает только у вас."));
   parts.push(el("div", { class: "cols" },
     el("div", { class: "col-row head" }, el("span", {}, "Столбец"), el("span", {}, "Что это"), el("span", {}, "Настройки")),
     ...st.columns.map((c) => columnRow(st, c))));
@@ -2142,7 +2336,7 @@ function howPanel(d) {
   const steps = [
     el("li", {}, el("b", {}, "Код собрал сводку отчёта. "), `В ней ${sent.metrics} ${plural(sent.metrics, "показатель", "показателя", "показателей")}, `
       + `${sent.dimensions} ${plural(sent.dimensions, "измерение", "измерения", "измерений")}, ${fmt(sent.chars)} знаков: названия, итоги к базе, ряды по периодам и вклады значений. `
-      + "Строк таблицы и заметок из файла в ней нет."),
+      + `Строк таблицы и заметок из файла в ней нет, а имя файла заменено подписью «${sent.digest.report.source}».`),
     el("li", {}, el("b", {}, model ? (stub ? "Офлайн-заглушка вернула план в формате GigaChat. " : "GigaChat прочитал сводку и вернул план. ") : "План по умолчанию. "),
       model ? `Рекомендовано блоков: ${d.plan.widgets.length}, инсайтов: ${d.plan.insights.length}, шагов: ${d.plan.next_steps.length}.`
         : "Модель не дала пригодного плана, поэтому блоки и инсайты собраны кодом по тем же числам сводки."),
@@ -2175,7 +2369,7 @@ function dashHeader(d) {
     : el("span", { class: "badge ok" }, icon("check"), `числа проверены · ${ver.checked}`));
   const again = el("button", { class: "btn sm", type: "button", onclick: () => buildDashboard(true) }, icon("refresh"), "Построить заново");
   const how = el("button", { class: "btn sm", type: "button", onclick: () => { const p = $("d-how"); p.open = true; p.scrollIntoView({ block: "start", behavior: "smooth" }); } }, "Как построен");
-  const meta = [`Источник: ${rep.source}`, rep.analysis_window ? `Период: ${rep.analysis_window.from} – ${rep.analysis_window.to}` : "Без дат: значения за весь файл",
+  const meta = [`Источник: ${d.source}`, rep.analysis_window ? `Период: ${rep.analysis_window.from} – ${rep.analysis_window.to}` : "Без дат: значения за весь файл",
     rep.baseline ? `База сравнения: ${rep.baseline}` : "Без базы сравнения", `Построен ${when(d.created_at)}`];
   const head = el("section", { class: "d-head" },
     el("div", { class: "d-top" }, el("div", { class: "badges" }, el("span", { class: "eyebrow" }, "Дашборд"), ...badges), el("div", { class: "acts" }, how, again)),
@@ -2286,19 +2480,24 @@ function startDashLoading(rebuild) {
 async function buildDashboard(rebuild) {
   if (dashBusy) return;
   if (status && status.llm_error) { showConnect(); return; }
+  if (status && status.consent_required) { showPreview(() => buildDashboard(rebuild)); return; }
   dashBusy = true;
   if (!chatting) setChatting(true);
   showDash(true);
   startDashLoading(!!rebuild);
   const lock = [$("dash-btn"), $("dc-build"), $("dc-again")];
   lock.forEach((b) => { b.disabled = true; });
+  let needConsent = false;
   try {
     const res = await api("/api/dashboard", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_id: clientId() }) });
-    if (!res.ok) {
-      const detail = res.body && res.body.detail;
-      throw new Error(typeof detail === "string" ? detail : "Сервер вернул ошибку при построении дашборда.");
+    if (res.status === 428) needConsent = true; // сервер потребовал согласия: ничего не отправлено
+    else {
+      if (!res.ok) {
+        const detail = res.body && res.body.detail;
+        throw new Error(typeof detail === "string" ? detail : "Сервер вернул ошибку при построении дашборда.");
+      }
+      displayDashboard(res.body);
     }
-    displayDashboard(res.body);
   } catch (e) {
     const message = e instanceof TypeError ? "Нет связи с сервером. Проверьте, что он запущен." : e.message;
     if (rebuild && dashData && dashData.plan) { // прежний дашборд остаётся на месте
@@ -2312,6 +2511,14 @@ async function buildDashboard(rebuild) {
     lock.forEach((b) => { b.disabled = false; });
   }
   await refreshStatus();
+  if (needConsent) {
+    stopDashTimer();
+    dashHost.classList.remove("loading");
+    const busyBar = dashHost.querySelector(".d-busy");
+    if (busyBar) busyBar.remove();
+    if (!(dashData && dashData.plan)) closeDashboard(); // прежнего дашборда не было: возвращаем экран как был
+    showPreview(() => buildDashboard(rebuild));
+  }
 }
 
 /* Открывает готовый дашборд активного отчёта или строит новый */
@@ -2341,8 +2548,10 @@ function renderDashCta() {
   let note;
   if (has) note = `Дашборд «${status.dashboard.title}» построен ${when(status.dashboard.created_at)}, блоков: ${status.dashboard.widgets}.`;
   else if (status.llm_error) note = "GigaChat не подключён. Подключите его, чтобы получить рекомендации по дашборду.";
-  else if (status.offline) note = "Сейчас включена офлайн-заглушка вместо GigaChat: она имитирует рекомендации, и ничего никуда не отправляется. Подключите GigaChat, чтобы получить настоящие.";
-  else note = "В GigaChat уйдёт сводка отчёта: названия показателей и разрезов, итоги, ряды по периодам и вклады значений. Строк таблицы и заметок из файла в ней нет.";
+  else if (status.offline) note = "Сейчас включена офлайн-заглушка вместо GigaChat: она имитирует рекомендации, и ничего никуда не отправляется. Подключите GigaChat, чтобы получить настоящие."
+    + (status.consent_required ? " Режим проверки: перед отправкой всё равно покажем, что ушло бы в модель." : "");
+  else note = "В GigaChat уйдёт сводка отчёта: названия показателей и разрезов, итоги, ряды по периодам и вклады значений. Строк таблицы и заметок из файла в ней нет, имя файла заменяется подписью."
+    + (status.consent_required ? " Перед первой отправкой покажем, что именно уйдёт, и спросим подтверждение." : "");
   $("dc-note").textContent = note;
 }
 

@@ -2,7 +2,8 @@
 
 Порядок работы:
   build_digest(table)        — сводка отчёта для GigaChat: показатели, итоги к базе, ряды, вклады значений измерений,
-                               скрытые проблемы. Построчных данных в ней нет;
+                               скрытые проблемы. Построчных данных в ней нет, имя файла заменено подписью «отчёт.xlsx»,
+                               а столбцы с пометкой «Не отправлять в модель» не участвуют вовсе;
   assemble(table, plan, ...) — план модели (какие блоки показать) сверяется с отчётом, блоки строятся кодом;
                                то, что не удалось построить, убирается с пояснением, недостающее добирается по умолчанию;
   fallback_plan(digest)      — план «по умолчанию» из сводки: им дополняется ответ модели, и по нему же работает заглушка.
@@ -140,7 +141,7 @@ def build_digest(t: Table, *, max_metrics: int = MAX_DIGEST_METRICS, points: int
         entries.append(_metric_entry(t, m, win, cmp, base, scan, points))
     bases = Counter(b.label for _, _, b in scored if b is not None)
     report = {
-        "source": t.source, "kind": "стратегическая витрина с целями" if t.goals else "таблица", "rows": info["rows"],
+        "source": t.public_name, "kind": "стратегическая витрина с целями" if t.goals else "таблица", "rows": info["rows"],
         "metrics_count": len(t.spec.metrics), "grain": t.grain, "has_plan": info["has_plan"],
         "period": ({"from": info["first_period"], "to": info["last_period"], "periods": info["periods"]}
                    if t.grain is not None else None),

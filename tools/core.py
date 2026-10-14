@@ -107,7 +107,7 @@ def describe_dataset() -> dict:
     базы сравнения. Вызывайте, если нужно понять структуру данных или вопрос про сам отчёт."""
     t = datastore.get_table()
     info = t.summary()
-    out = {"source": t.source, "rows": info["rows"], "grain": t.grain, "periods": info["periods"],
+    out = {"source": t.public_name, "rows": info["rows"], "grain": t.grain, "periods": info["periods"],
            "metrics_count": len(t.spec.metrics)}
     if t.grain is not None:
         win, _ = E.resolve_window(t)
@@ -116,7 +116,10 @@ def describe_dataset() -> dict:
         out["baselines_available"] = {"plan": any(m.has_plan for m in t.spec.metrics),
                                       "prev": _available(t, win, E.PREV), "yoy": _available(t, win, E.YOY)}
     if t.rows_excluded:
-        out["filters"] = [{"column": f["column"], "kept_values": f["values"]} for f in t.spec.filters]
+        # фильтр по столбцу «Не отправлять в модель» работает локально: ни его название, ни значения не раскрываются, остаётся счётчик
+        shown = [{"column": f["column"], "kept_values": f["values"]} for f in t.spec.filters if f["column"] not in t.spec.excluded]
+        if shown:
+            out["filters"] = shown
         out["rows_excluded_by_filters"] = t.rows_excluded
     out["metrics"] = [{"name": m.name, "unit": m.unit, "better": BETTER_WORD[m.better], "definition": m.definition(),
                        "has_plan": m.has_plan, **({"goal": m.goal} if m.goal else {})} for m in t.spec.metrics[:40]]

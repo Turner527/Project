@@ -170,7 +170,7 @@ GRAIN_WORDS = {"day": "дни", "week": "недели", "month": "месяцы",
 def catalog_text(table) -> str:
     """Каталог отчёта для промпта: период, показатели, измерения. Строится кодом, поэтому ему можно доверять."""
     s = table.summary()
-    parts = [f"Доступные данные: источник «{table.source}»"]
+    parts = [f"Доступные данные: источник «{table.public_name}»"]
     if table.grain is not None:
         parts.append(f"период с {s['first_period']} по {s['last_period']} (детализация: {GRAIN_WORDS[table.grain]})")
     metrics = []

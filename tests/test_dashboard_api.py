@@ -113,7 +113,9 @@ def test_dashboard_of_an_uploaded_report_names_the_problem_segment(client, uploa
     load_report(client, sample_bytes(tmp_path, "marketing"), "marketing.xlsx")
     d = build(client)
     assert d["plan_source"] == "model" and d["verification"]["status"] == "проверен"
-    assert d["sent_to_model"]["digest"]["report"]["source"] == "marketing.xlsx"
+    assert d["sent_to_model"]["digest"]["report"]["source"] == "отчёт.xlsx"  # в модель имя файла не уходит
+    assert d["source"] == "marketing.xlsx" and "marketing" not in json.dumps(d["sent_to_model"], ensure_ascii=False)
+    assert "marketing.xlsx" in d["plan"]["title"]  # а пользователь видит настоящее имя в тексте плана
     assert d["plan"]["insights"][0]["severity"] == "problem" and any("Поиск" in i["text"] for i in d["plan"]["insights"])
     # в модель ушла сводка, а не строки отчёта: ни одной даты построчных данных и никаких заметок о файле
     sent = json.dumps(d["sent_to_model"]["digest"], ensure_ascii=False)
