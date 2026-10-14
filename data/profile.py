@@ -36,6 +36,33 @@ NEUTRAL_WORDS = ("обращени", "всего", "total", "остаток", "�
 INCOME_WORDS = ("доход", "income")
 EXPENSE_WORDS = ("расход", "затрат", "expense", "cost", "spend")
 
+# Подсказка «возможно, персональные данные» (только подсказка: пометку «Не отправлять в модель» ставит пользователь).
+# Контакты и идентификаторы ищем в названии любого столбца, слова про людей и договоры — только в текстовых
+# («Клиентов, шт» — это количество, а не клиенты). (регулярное выражение, причина)
+SENSITIVE_STRONG = [
+    (re.compile(r"телефон|\bтел\b|мобильн|\b(phone|mobile|whatsapp)\b", re.I), "в названии похоже на телефон"),
+    (re.compile(r"e-?mail|эл\.? ?почт|электронн\w* почт|(?<![а-яё])почт[аыуе]?(?![а-яё])", re.I), "в названии похоже на адрес почты"),
+    (re.compile(r"паспорт|passport|(?<![а-яё])(инн|снилс)(?![а-яё])|\bssn\b|дата рожд|рожден|birth", re.I),
+     "в названии похоже на паспорт, ИНН, СНИЛС или дату рождения"),
+    (re.compile(r"номер карт|карт[аы] №|card ?(no|num)|\bpan\b|iban|номер сч[её]т|расч[её]тный сч", re.I),
+     "в названии похоже на номер карты или счёта"),
+]
+SENSITIVE_WEAK = [
+    (re.compile(r"(?<![а-яё])фио(?![а-яё])|ф\.и\.о|фамили|(?<![а-яё])имя(?![а-яё])|отчество|\b(full ?name|first ?name|last ?name|surname)\b",
+                re.I), "в названии похоже на имена людей"),
+    (re.compile(r"(?<![а-яё])клиент(?!ск|ов(?![а-яё]))|сотрудник|контрагент|покупател|получател|заёмщик|заемщик|пациент|абонент|"
+                r"физлиц|физическ|менеджер|продавец|работник|водител|логин|\b(customer|client|employee|patient|username|login)\b",
+                re.I), "в названии похоже на клиентов или сотрудников"),
+    (re.compile(r"адрес|address|место жительства|прожива", re.I), "в названии похоже на адрес"),
+    (re.compile(r"договор|contract", re.I), "в названии похоже на договор"),
+    (re.compile(r"(?<![а-яё])(карта|карты|счёт|счет)(?![а-яё])", re.I), "в названии похоже на карту или счёт"),
+]
+EMAIL_RE = re.compile(r"[\w.+\-]+@[\w\-]+(\.[\w\-]+)+")
+PHONE_CHARS_RE = re.compile(r"\+?[\d\s\-()]{10,22}")
+CARD_RE = re.compile(r"\d[\d \-]{11,22}\d")
+SENSITIVE_VALUE_SHARE = 0.6  # доля выборки, при которой значения считаются похожими
+SENSITIVE_SAMPLE = 200
+
 # (название, ключевые слова числителя, знаменателя, множитель, единица, лучше). Единица "" — как у числителя.
 RATIO_PATTERNS = [
     ("CTR", ("клик", "click"), ("показ", "impress"), 100, "%", "up"),
@@ -107,12 +134,58 @@ def _examples(values: pd.Series, n: int = 3) -> list[str]:
     return out
 
 
+def _is_phone(text: str) -> bool:
+    digits = re.sub(r"\D", "", text)
+    if not PHONE_CHARS_RE.fullmatch(text) or not 10 <= len(digits) <= 15:
+        return False
+    # просто цепочка из 10 цифр похожа на любой код: телефоном считаем +…, 11 цифр с 7 или 8 или 10 цифр с разделителями
+    return text.startswith("+") or (len(digits) == 11 and digits[0] in "78") or (len(digits) == 10 and any(c in text for c in " -()"))
+
+
+def _luhn(digits: str) -> bool:
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        d = int(ch)
+        if i % 2:
+            d = d * 2 - 9 if d > 4 else d * 2
+        total += d
+    return total % 10 == 0
+
+
+def _is_card(text: str) -> bool:
+    if not CARD_RE.fullmatch(text):
+        return False
+    digits = re.sub(r"\D", "", text)
+    return 13 <= len(digits) <= 19 and _luhn(digits)
+
+
+def _sensitive(name: str, kind: str, values: pd.Series) -> tuple[bool, str]:
+    """(похоже ли на персональные данные, причина). По значениям (почта, телефон, номер карты в большинстве ячеек выборки)
+    и по названию. Ничего не решает за пользователя: только подсказывает."""
+    if kind in ("text", "number") and len(values):
+        step = max(1, len(values) // SENSITIVE_SAMPLE)
+        sample = []
+        for v in values.iloc[::step][:SENSITIVE_SAMPLE]:
+            if isinstance(v, float) and v.is_integer():
+                v = int(v)
+            sample.append(str(v).strip())
+        for label, test in (("адреса электронной почты", lambda t: bool(EMAIL_RE.fullmatch(t))),
+                            ("телефонные номера", _is_phone), ("номера банковских карт", _is_card)):
+            if sum(1 for t in sample if test(t)) >= SENSITIVE_VALUE_SHARE * len(sample):
+                return True, f"значения похожи на {label}"
+    for pattern, reason in SENSITIVE_STRONG + (SENSITIVE_WEAK if kind == "text" else []):
+        if pattern.search(name):
+            return True, reason
+    return False, ""
+
+
 def _column_stats(name: str, series: pd.Series, fmt: str) -> dict:
     blank = empty_mask(series)  # один раз на столбец: на больших файлах это заметная часть времени
     values = series[~blank]
     kind = _kind_of(values)
     info = {"name": name, "kind": kind, "missing": int(blank.sum()), "n_unique": int(series.dropna().astype(str).nunique()),
             "examples": _examples(values), "format": fmt, "role": "ignore", "reason": ""}
+    info["sensitive_hint"], info["sensitive_reason"] = _sensitive(name, kind, values)
     if kind == "number":
         nums = to_number_series(values).dropna()
         info.update(min=float(nums.min()), max=float(nums.max()),
@@ -303,6 +376,11 @@ def profile(raw: RawFile, sheet: str | None = None) -> dict:
         warnings.append("В данных нет плана и только один период: сравнивать не с чем.")
     if not spec.metrics:
         warnings.append("Не найдено ни одного числового столбца для показателей.")
+
+    sensitive = [c["name"] for c in cols if c["sensitive_hint"]]
+    if sensitive:
+        warnings.append("Возможно, персональные данные: " + ", ".join(f"«{n}»" for n in sensitive[:6]) + (" и др." if len(sensitive) > 6 else "")
+                        + ". Если их нельзя передавать в модель, отметьте у этих столбцов «Не отправлять в модель».")
 
     # --- проверка качества данных (по предлагаемой спецификации)
     key_cols = ([date_col["name"]] if date_col else []) + spec.dimensions

@@ -4,6 +4,7 @@
 ряды по периодам, вклады значений. Построчных данных в ней нет. Что возвращает модель: план (какие блоки показать,
 инсайты, шаги, вопросы). Что делает код: сверяет план с отчётом, строит данные блоков, проверяет числа в текстах.
 """
+import copy
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -26,6 +27,7 @@ from agent.verifier import Verification, verify
 from data.model import Table
 from logs.store import DASHBOARD_PREFIX
 from tools import dashboard as D
+from tools.privacy import unmask, unmask_text
 
 MAX_TOKENS = 3500
 SEVERITY_WORD = {"problem": "проблема", "risk": "риск", "opportunity": "возможность", "info": "наблюдение"}
@@ -119,9 +121,11 @@ class DashboardAgent:
     def __init__(self, llm: LLMClient):
         self.llm = llm
 
-    def run(self, table: Table) -> DashboardResult:
+    def run(self, table: Table, digest: dict | None = None) -> DashboardResult:
+        """digest — готовая сводка: так в модель уходит ровно тот текст, который пользователь видел перед отправкой
+        (сборка сводки ограничена по времени и не обязана давать один и тот же результат дважды)."""
         started = time.perf_counter()
-        digest = D.build_digest(table)
+        digest = copy.deepcopy(digest) if digest is not None else D.build_digest(table)
         text = D.digest_text(digest)
         usage, raw, plan, error = Usage(), "", None, None
         try:
@@ -147,7 +151,12 @@ class DashboardAgent:
         verification = None
         if clean is not None:
             sources = [SimpleNamespace(call_id="сводка", result=digest)] + [SimpleNamespace(call_id=w["id"], result=w) for w in widgets]
-            verification = verify(plan_texts(clean), sources)
+            verification = verify(plan_texts(clean), sources)  # числа сверяются по тексту модели, как он пришёл
+        # модель знает файл только как «отчёт.xlsx»: пользователю в планах, заметках и подсказках показывается настоящее имя
+        clean, widgets, notes = (unmask(x, table.source) for x in (clean, widgets, notes))
+        if verification is not None:
+            for u in verification.unverified:
+                u.context = unmask_text(u.context, table.source)
         return DashboardResult(
             source=table.source, plan=clean, widgets=widgets, notes=notes, verification=verification, plan_source=plan_source,
             raw_text=raw, error=error, usage=usage, latency_ms=int((time.perf_counter() - started) * 1000),

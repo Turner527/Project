@@ -11,17 +11,29 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from agent.dashboard import DashboardAgent, context_text
-from agent.llm import ConfigError, GigaChatLLM, LLMClient, LLMError, KNOWN_MODELS, available_models, load_env, make_llm
+from agent.llm import (
+    ConfigError,
+    GigaChatLLM,
+    LLMClient,
+    LLMError,
+    KNOWN_MODELS,
+    available_models,
+    llm_sends_data_out,
+    load_env,
+    make_llm,
+)
 from agent.loop import Agent, DashboardContext
 from agent.prompts import PROMPT_VERSION
 from agent.tool_adapter import ToolAdapter, make_adapter
 from app import connect as connect_mod
+from app.consent import CONSENT_DETAIL, STALE_DETAIL, ConsentGate
 from data.profile import profile
 from data.readers import read_file
 from data.validation import WorkbookError, check_zip_size
 from logs.store import STATUS_ERROR, LogStore
 from tools import dashboard_store, datastore
 from tools.engine import suggest_questions
+from tools.privacy import mask
 
 STATIC_DIR = Path(__file__).parent / "static"
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
@@ -35,6 +47,10 @@ class AskRequest(BaseModel):
 
 class DashboardRequest(BaseModel):
     client_id: str | None = Field(default=None, max_length=64)
+
+
+class ConsentRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=128)
 
 
 class ModelRequest(BaseModel):
@@ -78,6 +94,7 @@ def create_app(
     state = {"llm": llm, "error": llm_error}
     adapter = adapter or make_adapter()
     store = store or LogStore()
+    gate = ConsentGate()  # подтверждения «что уйдёт в модель»; живут, пока работает сервер
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -92,10 +109,14 @@ def create_app(
 
     @app.get("/api/status")
     def status() -> dict:
+        table, fingerprint = datastore.snapshot()
+        sends = llm_sends_data_out(state["llm"])
         return {
             "llm": state["llm"].name if state["llm"] else None,
             "llm_error": state["error"],
             "offline": bool(state["llm"] and state["llm"].name == "stub"),
+            "sends_data_out": sends,
+            "consent_required": sends and not gate.is_confirmed(table, fingerprint),
             "tools_backend": (os.getenv("TOOLS_BACKEND") or "mcp").lower(),
             "prompt_version": PROMPT_VERSION,
             "dataset": datastore.describe(),
@@ -104,10 +125,13 @@ def create_app(
         }
 
     @app.post("/api/ask")
-    def ask(req: AskRequest) -> dict:
+    def ask(req: AskRequest):
         if state["llm"] is None:
             raise HTTPException(503, state["error"] or "Языковая модель не настроена.")
-        result = Agent(state["llm"], adapter).run(req.question.strip(), _dashboard_context(dashboard_store.current()))
+        table, fingerprint = datastore.snapshot()
+        if llm_sends_data_out(state["llm"]) and not gate.is_confirmed(table, fingerprint):
+            return _consent_required()
+        result = Agent(state["llm"], adapter).run(req.question.strip(), _dashboard_context(dashboard_store.current(), table.source))
         request_id = store.log_request(result, req.client_id)
         data = result.to_dict()
         data["request_id"] = request_id
@@ -115,18 +139,39 @@ def create_app(
         return data
 
     @app.post("/api/dashboard")
-    def build_dashboard(req: DashboardRequest = DashboardRequest()) -> dict:
+    def build_dashboard(req: DashboardRequest = DashboardRequest()):
         """Отправляет сводку активного отчёта в модель, строит дашборд по её рекомендациям и сохраняет его."""
         if state["llm"] is None:
             raise HTTPException(503, state["error"] or "Языковая модель не настроена.")
         table, fingerprint = datastore.snapshot()
-        result = DashboardAgent(state["llm"]).run(table)
+        digest = None
+        if llm_sends_data_out(state["llm"]):
+            digest = gate.approved_digest(table, fingerprint)  # в модель уходит ровно подтверждённая сводка
+            if digest is None:
+                return _consent_required()
+        result = DashboardAgent(state["llm"]).run(table, digest)
         result.fingerprint = fingerprint
         result.request_id = store.log_dashboard(result, req.client_id)
         payload = result.to_dict()
         if result.plan is not None and result.widgets:
             dashboard_store.save(payload)
         return payload
+
+    @app.get("/api/preview")
+    def preview() -> dict:
+        """Что уйдёт в модель: сводка отчёта (точный текст), каталог чата, исключённые столбцы. Сводка запоминается:
+        дашборд после подтверждения строится именно по ней."""
+        table, fingerprint = datastore.snapshot()
+        return gate.preview(table, fingerprint, required=llm_sends_data_out(state["llm"]),
+                            kind=datastore.active_source()[0], llm_name=state["llm"].name if state["llm"] else None)
+
+    @app.post("/api/consent")
+    def consent(req: ConsentRequest) -> JSONResponse:
+        """Подтверждает отправку сводки текущего отчёта. Токен берётся из /api/preview: изменилась сводка — он не подойдёт."""
+        table, fingerprint = datastore.snapshot()
+        if not gate.consent(table, fingerprint, req.token):
+            return JSONResponse({"ok": False, "detail": STALE_DETAIL}, status_code=409)
+        return JSONResponse({"ok": True, "confirmed": True})
 
     @app.get("/api/dashboard")
     def get_dashboard() -> dict:
@@ -249,13 +294,18 @@ def _dashboard_brief(payload: dict | None) -> dict | None:
             "widgets": len(payload["widgets"])}
 
 
-def _dashboard_context(payload: dict | None) -> DashboardContext | None:
-    """Выводы дашборда для чата: после дашборда вопросы задаются с учётом его инсайтов, их числа проверены."""
+def _consent_required() -> JSONResponse:
+    return JSONResponse({"ok": False, "consent_required": True, "detail": CONSENT_DETAIL}, status_code=428)
+
+
+def _dashboard_context(payload: dict | None, source: str) -> DashboardContext | None:
+    """Выводы дашборда для чата: после дашборда вопросы задаются с учётом его инсайтов, их числа проверены.
+    В сохранённом плане стоит настоящее имя файла, а в модель оно не уходит: в промпт текст идёт с подписью «отчёт.xlsx»."""
     if not payload or not payload.get("plan"):
         return None
     sources = {"сводка": payload["sent_to_model"]["digest"], "блоки": payload["widgets"]}
     unverified = {u["field"] for u in ((payload.get("verification") or {}).get("unverified") or [])}
-    return DashboardContext(context_text(payload["plan"], unverified=unverified), sources)
+    return DashboardContext(context_text(mask(payload["plan"], source), unverified=unverified), sources)
 
 
 def _is_strategic(content: bytes) -> bool:

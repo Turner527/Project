@@ -13,6 +13,7 @@ from agent.schemas import Memo
 from agent.tool_adapter import ToolAdapter, ToolCallRecord
 from agent.verifier import Verification, verify
 from tools import datastore
+from tools.privacy import unmask, unmask_text
 
 MAX_STEPS = 6
 FINAL_MAX_TOKENS = 2000
@@ -91,10 +92,13 @@ class Agent:
         usage, steps, raw = Usage(), 0, ""
         memo: Memo | None = None
         error: str | None = None
+        real_name = ""
         try:
             functions = self.adapter.functions
+            table = datastore.get_table()
+            real_name = table.source
             messages = [
-                {"role": "system", "content": build_system_prompt(datastore.get_table(), context.text if context else None)},
+                {"role": "system", "content": build_system_prompt(table, context.text if context else None)},
                 {"role": "user", "content": question},
             ]
             for _ in range(self.max_steps):
@@ -132,6 +136,10 @@ class Agent:
             cited = [c for c in memo.used_tool_calls if c in real]
             derived = [cid for ids in verification.sources.values() for cid in ids]
             memo.used_tool_calls = list(dict.fromkeys(cited + derived))
+            # модель знает файл только как «отчёт.xlsx»: пользователю в ответе показывается настоящее имя
+            memo = Memo.model_validate(unmask(memo.model_dump(), real_name))
+            for u in verification.unverified:
+                u.context = unmask_text(u.context, real_name)
         return AgentResult(
             question=question,
             memo=memo,

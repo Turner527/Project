@@ -18,6 +18,7 @@ from data.parsing import (
     to_number_series,
 )
 from data.validation import WorkbookError
+from tools.privacy import public_name
 
 FREQ = {"day": "D", "week": "W", "month": "M", "quarter": "Q", "year": "Y"}
 KINDS = ("sum", "mean", "last", "ratio")
@@ -89,11 +90,14 @@ class Spec:
     filters: list[dict] = field(default_factory=list)  # {"column": ..., "values": [...]} — оставить только эти значения
     significant_pct: float = 3.0
     sheet: str | None = None
+    # «Не отправлять в модель»: такой столбец не может быть ни датой, ни разрезом, ни показателем (числителем,
+    # знаменателем, планом); как фильтр строк (локальная чистка данных) — может, но ни название, ни значения не раскрываются
+    excluded: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {"sheet": self.sheet, "date": self.date, "dimensions": list(self.dimensions),
                 "metrics": [m.to_dict() for m in self.metrics], "filters": self.filters,
-                "significant_pct": self.significant_pct}
+                "significant_pct": self.significant_pct, "excluded": list(self.excluded)}
 
     @classmethod
     def from_dict(cls, d: dict) -> "Spec":
@@ -110,7 +114,8 @@ class Spec:
         return cls(date=(str(d["date"]) if d.get("date") else None),
                    dimensions=[str(x) for x in d.get("dimensions") or []],
                    metrics=[Metric.from_dict(m) for m in d.get("metrics") or []],
-                   filters=filters, significant_pct=pct, sheet=(str(d["sheet"]) if d.get("sheet") else None))
+                   filters=filters, significant_pct=pct, sheet=(str(d["sheet"]) if d.get("sheet") else None),
+                   excluded=list(dict.fromkeys(str(x) for x in d.get("excluded") or [])))
 
 
 def parse_expr(expr: str, columns: list[str]) -> list[tuple[int, str]] | None:
@@ -170,6 +175,36 @@ def _spec_errors(spec: Spec, columns: list[str]) -> list[str]:
     for f in spec.filters:
         if f["column"] not in columns:
             errors.append(f"Фильтр: столбца «{f['column']}» нет в таблице.")
+    errors += _excluded_errors(spec, columns)
+    return errors
+
+
+def _excluded_errors(spec: Spec, columns: list[str]) -> list[str]:
+    """Столбец с пометкой «Не отправлять в модель» нельзя использовать ни в одной роли, которая доходит до модели.
+    Фильтр строк разрешён: он работает локально, а его название и значения модели не раскрываются."""
+    if not spec.excluded:
+        return []
+    errors = []
+    banned = set(spec.excluded)
+    mark = "помечен «Не отправлять в модель»"
+    for col in spec.excluded:
+        if col not in columns:
+            errors.append(f"Не отправлять: столбца «{col}» нет в таблице.")
+    if spec.date in banned:
+        errors.append(f"Столбец «{spec.date}» {mark}, поэтому не может быть датой.")
+    for col in dict.fromkeys(spec.dimensions):
+        if col in banned:
+            errors.append(f"Столбец «{col}» {mark}, поэтому не может быть разрезом (измерением).")
+    for m in spec.metrics:
+        label = f"Показатель «{m.name}»"
+        if m.name in banned:
+            errors.append(f"{label}: название совпадает со столбцом «{m.name}», который {mark}.")
+        parts = ((m.num, "числителем"), (m.den, "знаменателем")) if m.kind == "ratio" else ((m.column, "столбцом показателя"),)
+        for expr, role in parts + ((m.plan_column, "столбцом плана"),):
+            used = parse_expr(expr, columns) if expr else None
+            for _, col in used or []:
+                if col in banned:
+                    errors.append(f"{label}: столбец «{col}» {mark}, поэтому не может быть {role}.")
     return errors
 
 
@@ -196,6 +231,11 @@ class Table:
     @property
     def dims(self) -> list[str]:
         return self.spec.dimensions
+
+    @property
+    def public_name(self) -> str:
+        """Подпись файла, под которой отчёт известен модели («отчёт.xlsx»): настоящее имя наружу не уходит."""
+        return public_name(self.source)
 
     def label(self, ordinal: int) -> str:
         """Подпись периода в формате детализации: 2026-09-15, 2026-09, 2026-Q3, 2026."""
