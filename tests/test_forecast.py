@@ -10,7 +10,7 @@ import pytest
 from tools import forecast as F
 from tools.forecast import LEVEL, MIN_POINTS, forecast_series
 
-Z = NormalDist().inv_cdf(0.5 + LEVEL / 2)
+Z = NormalDist().inv_cdf(0.5 + LEVEL / 2) * F.SIGMA_INFLATION  # полуширина = z · поправка · sigma
 
 
 def noisy(n, seed, base=100.0, sd=5.0):
@@ -309,7 +309,27 @@ def test_интервал_случайного_блуждания_покрыва
         x = np.cumsum(rng.normal(0, 1, n)) + rng.normal(0, 0.5, n)
         res = forecast_series(list(x[:-1]), 1)
         hits += res["low"][0] <= x[-1] <= res["high"][0]
-    assert 0.65 <= hits / runs <= 0.95
+    assert 0.72 <= hits / runs <= 0.92
+
+
+@pytest.mark.parametrize("kind", ["walk", "trend", "season"])
+def test_интервал_80_процентов_откалиброван_на_трёх_видах_рядов(kind):
+    """Без поправки SIGMA_INFLATION охват был 65–75%: интервал, названный 80%-ным, обещал бы больше, чем даёт."""
+    rng = np.random.RandomState(11)
+    n, runs, hits, total = 36, 200, 0, 0
+    for _ in range(runs):
+        t = np.arange(n + 3)
+        if kind == "walk":
+            y = 100 + np.cumsum(rng.normal(0, 3, n + 3))
+        elif kind == "trend":
+            y = 100 + 2 * t + rng.normal(0, 5, n + 3)
+        else:
+            y = 100 + 20 * np.sin(t * 2 * np.pi / 12) + rng.normal(0, 4, n + 3)
+        res = forecast_series(list(y[:n]), 3, 12 if kind == "season" else None)
+        for k in range(3):
+            total += 1
+            hits += res["low"][k] <= y[n + k] <= res["high"][k]
+    assert 0.74 <= hits / total <= 0.92
 
 
 def test_интервал_не_сужается_с_горизонтом_и_шире_нуля_на_шуме():

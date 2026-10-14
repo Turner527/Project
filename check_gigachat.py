@@ -216,6 +216,36 @@ def check_function_calling(llm: GigaChatLLM) -> Result:
                   "Агент будет работать нестабильно: возьмите более сильную модель (GigaChat-2-Pro или GigaChat-2-Max).")
 
 
+def check_what_if(llm: GigaChatLLM) -> Result:
+    """Разбирает ли модель вопрос «что если…» в вызов what_if: показатель, тип изменения (pct, abs или set) и его величина."""
+    from agent.tool_adapter import make_adapter
+    from tools.whatif import CHANGE_ALIASES
+
+    title = "Вопрос «что если» (вызов what_if)"
+    adapter = make_adapter("direct")
+    functions = [f for f in adapter.functions if f["name"] == "what_if"]
+    try:
+        resp = llm.chat(
+            [{"role": "system", "content": "Ты аналитик. Для чисел вызывай функции, сам не считай."},
+             {"role": "user", "content": "Что будет с показателем «NPS», если он вырастет на 10%?"}],
+            functions, function_call="auto")
+    except LLMError as exc:
+        return Result(FAIL, title, str(exc))
+    call = resp.function_call
+    if call is None or call.name != "what_if":
+        return Result(WARN, title, "модель не вызвала what_if.",
+                      "Вопросы «что если» будут работать нестабильно: возьмите модель посильнее (GigaChat-2-Pro или GigaChat-2-Max).")
+    args = call.arguments or {}
+    try:
+        value = float(args.get("change_value"))
+    except (TypeError, ValueError):
+        value = None
+    if str(args.get("change_type", "")).strip().lower() in CHANGE_ALIASES and value == 10:
+        return Result(OK, title, f"модель вызвала what_if с аргументами {args}")
+    return Result(WARN, title, f"модель вызвала what_if, но аргументы неверны: {args}.",
+                  "Ожидалось change_type pct и change_value 10. Если так будет и дальше, возьмите модель посильнее.")
+
+
 def check_dashboard(llm: GigaChatLLM) -> Result:
     """Строит дашборд по синтетической демо-витрине (ваши данные в проверке не участвуют): возвращает ли модель план в
     нужном формате и нет ли в её текстах чисел без источника."""
@@ -299,6 +329,7 @@ def run(offline: bool = False, out=print) -> list[Result]:
         return results
     if add(check_chat(llm)).status != FAIL:
         add(check_function_calling(llm))
+        add(check_what_if(llm))
         add(check_dashboard(llm))
     return results
 

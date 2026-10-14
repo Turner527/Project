@@ -166,6 +166,29 @@
   .tile .val.neg { color: var(--bad); } .tile .val.pos { color: var(--good); }
   .tile .cap { font-size: 13px; color: var(--muted); }
   .kpis-src { font-size: 12px; color: var(--faint); margin: 2px 2px 0; }
+  .eff-wrap { overflow-x: auto; margin-top: 4px; }
+  .eff { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .eff th, .eff td { padding: 8px 10px; text-align: right; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; vertical-align: top; }
+  .eff th { border-top: 0; color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+  .eff th:first-child, .eff td:first-child, .eff th:last-child, .eff td:last-child { text-align: left; }
+  .eff td.pos { color: var(--good); } .eff td.neg { color: var(--bad); }
+  .eff tr.alt td { color: var(--muted); }
+  .eff small { display: block; color: var(--muted); font-size: 12px; line-height: 1.4; }
+  @media (max-width: 640px) { /* узкий экран: каждая строка таблицы эффектов — маленькая карточка */
+    .eff thead { display: none; }
+    .eff, .eff tbody, .eff tr { display: block; }
+    .eff tr { padding: 10px 0; border-top: 1px solid var(--line); }
+    .eff td { display: flex; justify-content: space-between; gap: 12px; padding: 2px 4px; border: 0; text-align: right; }
+    .eff td[data-l]::before { content: attr(data-l); color: var(--muted); text-align: left; }
+    .eff td:first-child { font-weight: 600; text-align: left; }
+    .eff td:last-child { display: block; text-align: left; }
+  }
+  .fc-card { margin-top: 14px; padding: 18px 18px 14px; border-radius: 20px; background: var(--surface-2); border: 1px solid var(--line); }
+  .fc-card h6 { margin: 0 0 2px; font-size: 16px; }
+  .fc-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+  .fc-pick button { font: inherit; font-size: 13px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+  .fc-pick button[aria-pressed="true"] { color: var(--on-soft); background: var(--soft); border-color: var(--soft-line); }
+  .fc-table { overflow: auto; max-height: 300px; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; }
   h5.sec { margin: 26px 0 10px; font-size: 12.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
   .lead-text { margin: 0 0 10px; font-size: 16.5px; line-height: 1.65; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -825,6 +848,8 @@ function statusBadge(data) {
 /* Ключевые цифры берём из результата инструмента, а не из текста модели */
 function keyTiles(data) {
   const live = (name) => [...data.tool_calls].reverse().find((c) => c.tool === name && !c.error);
+  const scenario = live("what_if") || live("forecast_metric");
+  if (scenario) return scenarioBlocks(scenario);
   const call = live("diagnose_change") || live("get_change");
   if (!call) {
     const st = live("get_structure"); // отчёт без базы сравнения: вместо изменения — значение и главная доля
@@ -869,6 +894,131 @@ function structureTiles(call) {
   tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, "С чем сравнивали"), el("div", { class: "val sm" }, "Не с чем"),
     el("div", { class: "cap" }, "нет плана и прошлых периодов")));
   return [el("div", { class: "kpis" }, tiles), el("div", { class: "kpis-src" }, `Цифры из расчёта · ${call.call_id}`)];
+}
+
+
+/* ---------- «что если» и прогноз в ответе: плитки, таблица эффектов, график с интервалом ---------- */
+const TONE = { "лучше": "pos", "хуже": "neg" };
+const RELIABILITY_TONE = { "высокая": "pos", "низкая": "neg" };
+
+function changeText(c, unit) {
+  if (c.type === "pct") return fmtPct(c.value);
+  const step = unit === "%" ? " п.п." : unit ? ` ${unit}` : "";
+  return c.type === "abs" ? `${c.value > 0 ? "+" : ""}${fmt(c.value)}${step}` : `до ${fmt(c.value)}${unit ? (unit === "%" ? "%" : " " + unit) : ""}`;
+}
+
+function scenarioBlocks(call) {
+  const d = call.result, fc = d.forecast || {}, items = fc.metrics || [], first = items[0];
+  const tiles = [];
+  if (d.total) {
+    const t = d.total, scope = d.change.selection ? Object.entries(d.change.selection).map(([k, v]) => `${k}: ${v}`).join(", ") : "весь отчёт";
+    tiles.push(
+      el("div", { class: "tile" }, el("div", { class: "lbl" }, "Итог после изменения"),
+        el("div", { class: `val ${TONE[t.verdict] || ""}` }, shortValue(t.after, d.unit)),
+        el("div", { class: "cap" }, `${d.metric}: было ${fullValue(t.before, d.unit)} · ${fmtPct(t.delta_pct)} · ${t.verdict}`)),
+      el("div", { class: "tile" }, el("div", { class: "lbl" }, "Что меняем"),
+        el("div", { class: "val" }, changeText(d.change, d.unit)),
+        el("div", { class: "cap" }, `${d.metric} · ${scope}`)));
+  }
+  if (first) {
+    const total = first.horizon_total_baseline != null;
+    const last = first.baseline.length - 1, key = total ? "за " + fc.horizon + " " + fc.unit_word : "к " + fc.labels[last];
+    const base = total ? first.horizon_total_baseline : first.baseline[last];
+    const scen = total ? first.horizon_total_scenario : (first.scenario || [])[last];
+    tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, `Прогноз ${key}${d.total ? ": без изменений" : ""}`),
+      el("div", { class: "val" }, shortValue(base, first.unit)),
+      el("div", { class: "cap" }, total
+        ? `${first.metric} · интервал суммы: ${shortValue(first.horizon_total_low, first.unit)} – ${shortValue(first.horizon_total_high, first.unit)}`
+        : `${first.metric} · интервал ${fc.level_pct}%: ${shortValue(first.low[last], first.unit)} – ${shortValue(first.high[last], first.unit)}`)));
+    if (scen != null) tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, `Прогноз ${key}: со сценарием`),
+      el("div", { class: "val" }, shortValue(scen, first.unit)),
+      el("div", { class: "cap" }, `${first.metric} · разница ${total ? signed(shortValue(first.horizon_total_delta, first.unit), first.horizon_total_delta) : signed(shortValue(first.delta_abs[last], first.unit), first.delta_abs[last])}`)));
+    tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, "Надёжность прогноза"),
+      el("div", { class: `val sm ${RELIABILITY_TONE[first.reliability.level] || ""}` }, first.reliability.level),
+      el("div", { class: "cap" }, `${first.method} · тренд: ${first.trend.direction}`)));
+  }
+  const out = [];
+  if (tiles.length) out.push(el("div", { class: "kpis" }, tiles), el("div", { class: "kpis-src" }, `Цифры из расчёта · ${call.call_id}`));
+  if (d.effects && d.effects.length) out.push(el("h5", { class: "sec" }, "Что будет с показателями"), effectsTable(d));
+  if (d.not_estimated && d.not_estimated.length) {
+    out.push(el("ul", { class: "muted" }, d.not_estimated.map((x) => el("li", {}, `Не оценено: ${x.metric} — ${x.reason}`))));
+  }
+  if (fc.note && !items.length) out.push(el("div", { class: "alert warn" }, `Прогноз не построен: ${fc.note}`));
+  if (items.length) out.push(forecastCard(call));
+  if (d.assumptions && d.assumptions.length) {
+    out.push(el("details", {}, el("summary", {}, "Допущения расчёта"), el("ul", {}, d.assumptions.map((a) => el("li", {}, a)))));
+  }
+  return out;
+}
+
+function effectsTable(d) {
+  const rows = [];
+  const line = (name, unit, l, how, note, alt) => rows.push(el("tr", { class: alt ? "alt" : "" },
+    el("td", {}, name), el("td", { "data-l": "Было" }, fullValue(l.before, unit)), el("td", { "data-l": "Стало" }, fullValue(l.after, unit)),
+    el("td", { class: TONE[l.verdict] || "", "data-l": "Изменение" }, fmtPct(l.delta_pct)),
+    el("td", {}, how, note ? el("small", {}, note) : null)));
+  for (const e of d.effects) {
+    if (e.relation === "оценка по истории") {
+      const est = e.estimate;
+      line(e.metric, e.unit, e, "оценка по истории",
+        `интервал ${est.level_pct}%: от ${fullValue(e.after_low, e.unit)} до ${fullValue(e.after_high, e.unit)} · связь по истории ${fmt(est.correlation)}${est.beyond_history ? " · изменение больше всего, что было в истории" : ""}`);
+    } else if (e.with_estimate) {
+      const w = e.with_estimate;
+      line(e.metric, e.unit, e, "механически: остальное не меняется", null, true);
+      line(e.metric, e.unit, w, `с учётом реакции «${w.based_on}» по истории`, `интервал ${w.level_pct}%: от ${fullValue(w.after_low, e.unit)} до ${fullValue(w.after_high, e.unit)}`);
+    } else {
+      line(e.metric, e.unit, e, "по формуле: остальное не меняется");
+    }
+  }
+  const head = el("tr", {}, ["Показатель", "Было", "Стало", "Изменение", "Как получено"].map((t) => el("th", {}, t)));
+  return el("div", { class: "eff-wrap" }, el("table", { class: "eff" }, el("caption", { class: "hidden" }, "Эффект сценария на показатели"), el("thead", {}, head), el("tbody", {}, rows)));
+}
+
+/* Данные для drawTrend: факт, прогноз «без изменений» (пунктир), прогноз со сценарием и интервал базового прогноза */
+function forecastPlot(fc, item) {
+  const h = item.history, n0 = h.values.length, k = item.baseline.length, pad = (len) => Array(Math.max(len, 0)).fill(null);
+  const last = h.values[n0 - 1], join = (arr) => [...pad(n0 - 1), last, ...arr];
+  const scenario = Array.isArray(item.scenario);
+  return { title: `${item.metric}: факт и прогноз`, unit: item.unit, bucket: fc.bucket, labels: [...h.labels, ...fc.labels], dates: [...h.dates, ...fc.dates],
+    partial: Array(n0 + k).fill(false), others: 0, marker: null, plan: scenario ? join(item.baseline) : null, planLabel: "Без изменений",
+    series: [{ name: "Факт", values: [...h.values, ...pad(k)] }, { name: scenario ? "Со сценарием" : "Прогноз", values: join(scenario ? item.scenario : item.baseline) }],
+    band: { low: join(item.low), high: join(item.high), level: fc.level_pct }, divider: { index: n0 - 1, label: "прогноз" } };
+}
+
+function forecastCard(call) {
+  const d = call.result, fc = d.forecast, items = fc.metrics;
+  const state = { hidden: new Set() };
+  const host = el("div", { class: "d-plot" }), legend = el("div", { class: "d-legend" }), picker = el("div", { class: "fc-pick" });
+  const tableHost = el("div", { class: "fc-table" }), reasons = el("div", { class: "d-foot" });
+  let w = null, current = 0;
+  const key = (cls, color, text, extra) => el("span", { class: "it" }, el("i", { class: cls, style: `--k:${color}` }), text, extra || null);
+  const draw = () => drawTrend(host, w, state, host.clientWidth || 600);
+  function select(i) {
+    current = i;
+    const item = items[i];
+    w = forecastPlot(fc, item);
+    legend.replaceChildren(key("key", seriesColor("Факт"), "факт"), key("key", seriesColor(w.series[1].name), w.series[1].name.toLowerCase()),
+      ...(w.plan ? [key("key dash", "var(--muted)", "без изменений")] : []), key("sw", "var(--muted)", `интервал ${fc.level_pct}% базового прогноза`));
+    [...picker.children].forEach((b, k) => b.setAttribute("aria-pressed", String(k === i)));
+    reasons.replaceChildren(...[el("p", {}, `Метод: ${item.method}. Надёжность: ${item.reliability.level}.`),
+      ...item.reliability.reasons.slice(0, 3).map((t) => el("p", {}, t)), fc.assumption ? el("p", {}, fc.assumption) : null,
+      item.horizon_total_low != null ? el("p", {}, "Интервал суммы за весь горизонт получен сложением границ периодов, поэтому он консервативный: шире, чем 80%.") : null].filter(Boolean));
+    const rows = fc.labels.map((label, j) => el("tr", {}, el("td", {}, label), el("td", {}, fullValue(item.baseline[j], item.unit)),
+      el("td", {}, `${fullValue(item.low[j], item.unit)} – ${fullValue(item.high[j], item.unit)}`),
+      Array.isArray(item.scenario) ? el("td", {}, fullValue(item.scenario[j], item.unit)) : null));
+    const heads = ["Период", "Без изменений", `Интервал ${fc.level_pct}%`, ...(Array.isArray(item.scenario) ? ["Со сценарием"] : [])];
+    tableHost.replaceChildren(el("table", {}, el("caption", { class: "hidden" }, `${item.metric}: значения прогноза`),
+      el("thead", {}, el("tr", {}, heads.map((t) => el("th", {}, t)))), el("tbody", {}, rows)));
+    draw();
+  }
+  if (items.length > 1) {
+    items.forEach((item, i) => picker.append(el("button", { type: "button", "aria-pressed": "false", onclick: () => select(i) }, item.metric)));
+  }
+  select(0);
+  new ResizeObserver(() => { if (host.clientWidth > 0) draw(); }).observe(host);
+  return el("section", { class: "fc-card" }, el("h6", {}, d.change ? "Прогноз: с изменением и без" : "Прогноз «если ничего не менять»"),
+    items.length > 1 ? picker : null, legend, host, reasons,
+    el("details", {}, el("summary", {}, "Таблица прогноза"), tableHost));
 }
 
 function renderMemo(data) {
@@ -1697,7 +1847,7 @@ function drawTrend(host, w, state, width) {
   const single = w.series.length === 1;
   const narrow = width < 520;
   const H = narrow ? 240 : 300, W = Math.max(260, Math.round(width));
-  const dom = domainOf(shown, w.plan);
+  const dom = domainOf(shown, [...(w.plan || []), ...(w.band ? [...w.band.low, ...w.band.high] : [])]);
   if (!dom || !w.labels.length) { host.replaceChildren(el("div", { class: "d-empty" }, "Нет данных для графика")); return; }
   const top = 16, ph = H - top - 30, n = w.labels.length;
   const y = (v) => top + ph - ((v - dom.min) / (dom.max - dom.min)) * ph;
@@ -1724,6 +1874,19 @@ function drawTrend(host, w, state, width) {
     root.append(svg("text", { x: x(i).toFixed(1), y: H - 8, "text-anchor": anchor }, text));
   });
 
+  if (w.band) { // интервал прогноза: полупрозрачная полоса между нижней и верхней границей
+    const highs = segments(w.band.high);
+    segments(w.band.low).forEach((seg, si) => {
+      const up = highs[si] || [];
+      const edge = (pts) => pts.map(([i, v]) => `L${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join("");
+      root.append(svg("path", { d: `M${x(seg[0][0]).toFixed(1)} ${y(seg[0][1]).toFixed(1)}${edge(seg.slice(1))}${edge([...up].reverse())}Z`, style: "fill:var(--muted)", opacity: 0.18 }));
+    });
+  }
+  if (w.divider) { // граница между фактом и прогнозом
+    const at = x(w.divider.index).toFixed(1);
+    root.append(svg("line", { x1: at, x2: at, y1: m.t, y2: m.t + ph, style: "stroke:var(--c-axis)", "stroke-width": 1, "stroke-dasharray": "2 4" }));
+    if (!narrow) root.append(svg("text", { x: (x(w.divider.index) + 6).toFixed(1), y: m.t + 11, "text-anchor": "start" }, w.divider.label));
+  }
   if (w.marker) {
     let at = 0;
     w.dates.forEach((s, i) => { if (s <= w.marker.date) at = i; });
@@ -1789,7 +1952,8 @@ function drawTrend(host, w, state, width) {
     const rows = shown.map((s) => ({ s, v: s.values[current] })).sort((a, b) => (b.v ?? -Infinity) - (a.v ?? -Infinity));
     const nodes = [el("div", { class: "th" }, bucketWords(w.bucket, w.labels[current], w.dates[current], true) + (w.partial[current] ? " · неполный период" : "")),
       ...rows.map(({ s, v }) => tipRow(s.name, fullValue(v, w.unit), seriesColor(s.name)))];
-    if (w.plan && w.plan[current] != null) nodes.push(tipRow("план", fullValue(w.plan[current], w.unit), "var(--muted)", true));
+    if (w.plan && w.plan[current] != null) nodes.push(tipRow(w.planLabel || "план", fullValue(w.plan[current], w.unit), "var(--muted)", true));
+    if (w.band && w.band.low[current] != null) nodes.push(tipRow(`интервал ${w.band.level}%`, `${fullValue(w.band.low[current], w.unit)} – ${fullValue(w.band.high[current], w.unit)}`));
     if (cx == null) { const r = root.getBoundingClientRect(); cx = r.left + (x(current) / W) * r.width; cy = r.top + m.t; }
     showTip(nodes, cx, cy);
   }

@@ -52,6 +52,8 @@ from tools.fmt import num
 
 MIN_POINTS = 6  # меньше точек прогноз не строится
 LEVEL = 0.8  # доверительный интервал 80%
+SIGMA_INFLATION = 1.3  # ошибок для оценки sigma мало (до 6), а метод выбран по ним же: без поправки интервал «80%» покрывал 65–75% фактов
+# (400 смоделированных рядов: блуждание, тренд, сезонность); с 1,3 покрытие 77–85%
 MAX_HORIZON = 24
 MAX_FOLDS = 6  # число точек отсчёта скользящей проверки
 MIN_TRAIN = 5  # минимальная длина обучающей части при проверке
@@ -334,7 +336,7 @@ def _forecast(y: np.ndarray, filled: int, horizon: int, season: int | None, nonn
 
     z = NormalDist().inv_cdf(0.5 + LEVEL / 2)
     point = METHODS[method](y, horizon, season)
-    half = z * _sigmas(errs[method], horizon)
+    half = z * SIGMA_INFLATION * _sigmas(errs[method], horizon)
     low, high = point - half, point + half
     if nonnegative:
         point, low, high = (np.maximum(x, 0.0) for x in (point, low, high))

@@ -10,6 +10,7 @@ import re
 from agent.llm import TEMPERATURE, FunctionCall, LLMResponse, Usage
 from agent.prompts import CONTEXT_HEADER, DIGEST_CLOSE, DIGEST_OPEN
 from tools import dashboard, fmt
+from tools.text import stems
 
 _WORD_NUMBERS = {"два": 2, "две": 2, "три": 3, "четыре": 4, "пять": 5, "шесть": 6, "семь": 7, "восемь": 8,
                  "девять": 9, "десять": 10, "двенадцать": 12}
@@ -46,6 +47,42 @@ _STRATEGIC = re.compile(r"в первую очередь|приоритет|ст
 
 def _is_strategic(question: str) -> bool:
     return bool(_STRATEGIC.search(question))
+
+
+_RECOVERY = re.compile(r"к базе|к плану|к уровню базы|к прошлому уровню", re.I)  # «вернуть к базе» — арифметика возврата, не прогноз
+_WHATIF = re.compile(r"что\s+(?:будет|получится|станет)[^?]*\bесли|\bа\s+если|что\s+если|\bесли\s+(?:мы\s+)?(?:\S+\s+){0,4}"
+                     r"(?:снизим|снизит|снизить|уменьш\w+|сократ\w+|увелич\w+|вырастет|вырастут|повысим|повысит|повысить|поднимем|"
+                     r"упадёт|упадет|упадут|нарастим)", re.I)
+_FORECAST = re.compile(r"прогноз|каким\s+будет|какой\s+будет|какими\s+будут|что\s+будет\s+(?:с|со|через|дальше)|"
+                       r"через\s+(?:\d+|\w+)\s+(?:месяц|недел|дн|квартал)|если\s+ничего\s+не\s+(?:менять|делать|изменится)", re.I)
+_DOWN = re.compile(r"снизим|снизит|снизить|уменьш|сократ|упад|ниже|минус|−|падени|урезать|урежем", re.I)
+_UP = re.compile(r"вырастет|вырастут|увелич|повыс|подним|нарастим|выше|плюс|рост|добавим", re.I)
+_AMOUNT = re.compile(r"(\d+(?:[.,]\d+)?)\s*(%|процент\w*|п\.\s?п\.?|пп\b|пункт\w*)", re.I)
+
+
+def _is_whatif(question: str) -> bool:
+    return bool(_WHATIF.search(question)) and not _RECOVERY.search(question) and _AMOUNT.search(question) is not None
+
+
+def _is_forecast(question: str) -> bool:
+    return bool(_FORECAST.search(question)) and not _is_whatif(question)
+
+
+def _change_args(question: str) -> dict | None:
+    """Величина изменения из вопроса: «на 20%», «на 2 п.п.»; знак по словам «снизим / вырастет». Нет величины — None."""
+    m = _AMOUNT.search(question)
+    if not m:
+        return None
+    value = float(m.group(1).replace(",", "."))
+    if _DOWN.search(question) and not _UP.search(question):
+        value = -value
+    elif _DOWN.search(question) and _UP.search(question):  # «вырастет, а потом снизим»: берём слово, ближайшее к числу слева
+        left = question[: m.start()]
+        down = max((x.end() for x in _DOWN.finditer(left)), default=-1)
+        up = max((x.end() for x in _UP.finditer(left)), default=-1)
+        value = -value if down > up else value
+    kind = "abs" if m.group(2).lower().startswith(("п", "пп")) else "pct"
+    return {"change_type": kind, "change_value": value}
 
 
 def _dashboard_context(messages: list) -> dict | None:
@@ -101,6 +138,8 @@ class ScriptedLLM:
         if not results:
             return FunctionCall("find_metrics", {"query": question})
         name, data = results[-1]
+        if name in ("what_if", "forecast_metric"):
+            return None  # прогноз и сценарий посчитаны, данных достаточно
         if name == "diagnose_change" and "Не с чем сравнивать" in str(data.get("error", "")) \
                 and not any(n == "get_structure" for n, _ in results):
             # у отчёта нет базы сравнения: как велит промпт, вместо изменения берём значение и состав показателя
@@ -120,6 +159,8 @@ class ScriptedLLM:
         if metric is None and context:  # вопрос про «этот канал» без названия показателя — берём главную проблему дашборда
             metric = next((i["title"].split(":")[0] for i in context["insights"]
                            if i["severity"] in ("проблема", "риск") and ": " in i["title"]), None)  # «Показатель: оценка»
+        if _is_whatif(question) or _is_forecast(question):
+            return self._whatif_call(question, data, metric_hits)
         if metric is None:
             return None
         args = {"metric": metric, **_period_args(question)}
@@ -127,6 +168,32 @@ class ScriptedLLM:
         if hit:
             args.update(where_dimension=hit["dimension"], where_value=hit["value"])
         return FunctionCall("diagnose_change", args)
+
+    @staticmethod
+    def _whatif_call(question: str, data: dict, hits: list) -> FunctionCall | None:
+        """«Что если…» -> what_if, «что будет дальше» -> forecast_metric. Меняется показатель, названный после «если»;
+        остальные названные показатели просим оценить как следствия. Значение измерения из вопроса — срез изменения."""
+        if not hits:
+            return None
+        head, _, tail = question.lower().partition("если")
+        pick = lambda text: [h["metric"] for h in hits if set(stems(h["metric"], stop=False)) & set(stems(text))]  # noqa: E731
+        changed = (pick(tail) or [hits[0]["metric"]])[0] if tail else hits[0]["metric"]
+        value_hit = next(iter(data.get("value_matches", [])), None)
+        if _is_forecast(question):
+            args = {"metric": changed}
+            if value_hit:
+                args.update(where_dimension=value_hit["dimension"], where_value=value_hit["value"])
+            return FunctionCall("forecast_metric", args)
+        change = _change_args(question)
+        if change is None:
+            return None
+        args = {"metric": changed, **change, **_period_args(question)}
+        if value_hit:
+            args.update(where_dimension=value_hit["dimension"], where_value=value_hit["value"])
+        others = [m for m in pick(head) if m != changed][:3]
+        if others:
+            args["effect_on"] = others
+        return FunctionCall("what_if", args)
 
     # --- сборка записки ---
     def _strategic_memo(self, question: str, context: dict) -> dict:
@@ -161,6 +228,18 @@ class ScriptedLLM:
 
     def _memo(self, results: list) -> dict:
         ids = [d["call_id"] for _, d in results if "call_id" in d]
+        scenario = next((d for n, d in reversed(results) if n == "what_if" and "error" not in d), None)
+        forecast = next((d for n, d in reversed(results) if n == "forecast_metric" and "error" not in d), None)
+        if scenario is not None:
+            return self._memo_from_whatif(scenario, [scenario["call_id"]])
+        if forecast is not None:
+            return self._memo_from_forecast(forecast, [forecast["call_id"]])
+        failed = next((d for n, d in reversed(results) if n in ("what_if", "forecast_metric") and "error" in d), None)
+        if failed is not None:
+            return {"diagnosis": {"summary": f"Сценарий не посчитан: {failed['error']}", "root_cause": "Сценарий не посчитан",
+                                  "key_segments": []}, "scenarios": [],
+                    "manual_checks": ["Уточнить показатель, значение среза или величину изменения и повторить вопрос."],
+                    "used_tool_calls": [failed["call_id"]]}
         diag = next((d for n, d in reversed(results) if n == "diagnose_change" and "error" not in d), None)
         struct = next((d for n, d in reversed(results) if n == "get_structure" and "error" not in d), None)
         if diag is None and struct is not None:
@@ -177,6 +256,102 @@ class ScriptedLLM:
                 "used_tool_calls": ids,
             }
         return self._memo_from_diagnosis(diag, ids)
+
+    # --- «что если» и прогноз: записка целиком из результата инструмента ---
+    @staticmethod
+    def _ln(name: str, unit: str, d: dict) -> str:
+        pct = "н/д" if d.get("delta_pct") is None else f"{_fmt(d['delta_pct'], True)}%"
+        return f"{name}: {_fmt(d['before'])}{_u(unit)} → {_fmt(d['after'])}{_u(unit)} ({pct}, {d['verdict']})"
+
+    @staticmethod
+    def _forecast_text(fc: dict, item: dict, with_scenario: bool) -> str:
+        u, level = _u(item["unit"]), item["reliability"]["level"]
+        if "horizon_total_baseline" in item:  # сумма за горизонт: интервал тоже для суммы, а не для последнего периода
+            text = f"{item['metric']}: за {fc['horizon']} {fc['unit_word']} без изменений {_fmt(item['horizon_total_baseline'])}{u}"
+            if with_scenario and "horizon_total_scenario" in item:
+                text += f", со сценарием {_fmt(item['horizon_total_scenario'])}{u} (разница {_fmt(item['horizon_total_delta'], True)}{u})"
+            low, high = item["horizon_total_low"], item["horizon_total_high"]
+            tail = f"интервал суммы для базового прогноза {_fmt(low)}–{_fmt(high)}{u} (границы периодов сложены, интервал консервативный)"
+        else:
+            text = f"{item['metric']}: к {fc['labels'][-1]} без изменений {_fmt(item['baseline'][-1])}{u}"
+            if with_scenario and "scenario" in item:
+                text += f", со сценарием {_fmt(item['scenario'][-1])}{u}"
+            tail = f"интервал {fc['level_pct']}% для базового прогноза {_fmt(item['low'][-1])}–{_fmt(item['high'][-1])}{u}"
+        return f"{text}; {tail}, надёжность {level}"
+
+    def _memo_from_whatif(self, w: dict, ids: list[str]) -> dict:
+        unit, m = w["unit"], w["metric"]
+        c = w["change"]
+        scope = "".join(f" ({k} = «{v}»)" for k, v in (c.get("selection") or {}).items())
+        step = " п.п." if unit == "%" else _u(unit)
+        what = {"pct": f"{_fmt(c['value'], True)}%", "abs": f"{_fmt(c['value'], True)}{step}", "set": f"до {_fmt(c['value'])}{_u(unit)}"}[c["type"]]
+        period = w["period"]
+        span = f" за {period['from']}–{period['to']}" if period.get("from") else ""
+        sel = w["selection_value"]
+        sentences = [f"Сценарий: {m}{scope} {what}{span}. Значение в срезе {_fmt(sel['before'])}{_u(unit)} → {_fmt(sel['after'])}{_u(unit)}.",
+                     self._ln(f"Итог по отчёту, {m}", unit, w["total"]) + "."]
+        effects = w.get("effects", [])
+        lines = []
+        for e in effects:
+            main = e.get("with_estimate") or e
+            tag = "оценка по истории" if e["relation"] == "оценка по истории" else "по формуле"
+            if e.get("with_estimate"):
+                est = e["with_estimate"]
+                tag = f"по формуле с учётом реакции «{est['based_on']}» по истории: от {_fmt(est['after_low'])} до {_fmt(est['after_high'])}{_u(e['unit'])}"
+            elif e["relation"] == "оценка по истории":
+                est = e["estimate"]
+                tag = f"оценка по истории, интервал {est['level_pct']}% от {_fmt(e['after_low'])} до {_fmt(e['after_high'])}{_u(e['unit'])}"
+            lines.append(f"{self._ln(e['metric'], e['unit'], main)} [{tag}]")
+        if lines:
+            sentences.append("Связанные показатели: " + "; ".join(lines[:3]) + ".")
+        for r_ in w.get("not_estimated", [])[:2]:
+            sentences.append(f"«{r_['metric']}» по истории не оценён: {r_['reason']}")
+        fc = w.get("forecast") or {}
+        fmetrics = fc.get("metrics", [])
+        if fmetrics:
+            sentences.append("Прогноз: " + self._forecast_text(fc, fmetrics[0], True) + ".")
+        elif fc.get("note"):
+            sentences.append(f"Прогноз не построен: {fc['note']}")
+        scenarios = [{"name": f"Если {m}{scope} {what}", "description": "Арифметика по окну анализа: значение в срезе меняется, итог пересчитывается из тех же сумм.",
+                      "effect_estimate": self._ln(f"Итог, {m}", unit, w["total"]) + ".", "assumptions": w["assumptions"][:2]}]
+        if lines:
+            scenarios.append({"name": "Что будет со связанными показателями", "description": "Пересчёт по формуле и оценка по истории там, где формулы нет.",
+                              "effect_estimate": "; ".join(lines[:3]) + ".",
+                              "assumptions": [e["caveat"] for e in effects if e.get("caveat")][:1] or w["assumptions"][2:3]})
+        if fmetrics:
+            scenarios.append({"name": "Прогноз на ближайшие периоды", "description": "Базовый прогноз продолжает прошлую динамику, сценарий добавляет эффект изменения.",
+                              "effect_estimate": self._forecast_text(fc, fmetrics[0], True) + ".",
+                              "assumptions": [fc["assumption"]] if fc.get("assumption") else ["Прогноз продолжает прошлую динамику и не обещает результат."]})
+        checks = ["Проверить допущения сценария с владельцем показателя: изменение может сработать иначе, чем в арифметике.",
+                  "Сверить прогноз с планами, акциями и сезонностью, которых в данных нет."]
+        if effects and any(e["relation"] == "оценка по истории" for e in effects):
+            checks.append("Оценки по истории — корреляция: подтвердить на пилоте или у владельцев показателей.")
+        return {"diagnosis": {"summary": " ".join(sentences), "root_cause": "Сценарий «что если»: расчёт, а не диагноз",
+                              "key_segments": list((c.get("selection") or {}).values())},
+                "scenarios": scenarios[:3], "manual_checks": checks, "used_tool_calls": ids}
+
+    def _memo_from_forecast(self, f: dict, ids: list[str]) -> dict:
+        fc, m, unit = f["forecast"], f["metric"], f["unit"]
+        scope = "".join(f" ({k} = «{v}»)" for k, v in (f.get("filter") or {}).items())
+        items = fc.get("metrics", [])
+        if not items:
+            note = fc.get("note") or "прогноз не построен"
+            return {"diagnosis": {"summary": f"{m}{scope}: прогноз не построен. {note}", "root_cause": "Прогноз не построен: данных недостаточно",
+                                  "key_segments": []}, "scenarios": [],
+                    "manual_checks": ["Загрузить отчёт с более длинной историей по периодам, чтобы строить прогноз."], "used_tool_calls": ids}
+        item = items[0]
+        trend = item["trend"]
+        text = (f"Прогноз {m}{scope} «если ничего не менять»: {self._forecast_text(fc, item, False)}. Тренд: {trend['direction']}. "
+                f"Метод: {item['method']}. Это продолжение прошлой динамики, а не обещание.")
+        scenario = {"name": f"Базовый прогноз: {m}", "description": "Продолжение прошлой динамики без изменений в работе.",
+                    "effect_estimate": self._forecast_text(fc, item, False) + ".",
+                    "assumptions": ["Условия остаются как в прошлых периодах: акции, сезонность и решения не учтены."]}
+        return {"diagnosis": {"summary": text, "root_cause": "Прогноз, а не диагноз: причины изменений не искались",
+                              "key_segments": list((f.get("filter") or {}).values())},
+                "scenarios": [scenario],
+                "manual_checks": ["Сверить прогноз с планами, акциями и сезонностью, которых в данных нет.",
+                                  "Для оценки результата решений задайте вопрос «что если…» с величиной изменения."],
+                "used_tool_calls": ids}
 
     @staticmethod
     def _memo_from_structure(s: dict, ids: list[str]) -> dict:

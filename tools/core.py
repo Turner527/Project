@@ -10,6 +10,7 @@ from pydantic import Field
 
 from tools import datastore
 from tools import engine as E
+from tools import whatif as W
 from tools.engine import ToolError, r
 from tools.text import scores
 
@@ -318,7 +319,61 @@ def get_structure(metric: MetricArg, by: ByArg = None, period_from: FromArg = No
     return out
 
 
+ChangeTypeArg = Annotated[str, Field(description="Как меняем значение: pct — на N процентов (−20 — снизить на 20%), "
+                                                  "abs — прибавить N единиц показателя (для процентов — п.п.), "
+                                                  "set — задать значение N")]
+ChangeValueArg = Annotated[float, Field(description="Величина изменения: для pct — проценты со знаком, для abs — единицы "
+                                                     "показателя со знаком, для set — само новое значение")]
+EffectOnArg = Annotated[list[str] | None, Field(description="Показатели, на которые нужно оценить влияние. Не указано — "
+                                                             "считаются сам показатель и показатели, связанные с ним формулой. "
+                                                             "Назовите здесь показатель без формулы связи (например заказы при "
+                                                             "изменении расходов): будет оценка по истории с интервалом и оговоркой")]
+HorizonArg = Annotated[int | None, Field(description="На сколько периодов вперёд строить прогноз (в тех же корзинах, что и график: "
+                                                      "дни, недели, месяцы). Не указано — подбирается по детализации "
+                                                      "(неделя, 4 недели, 3 месяца)", ge=1, le=24)]
+
+
+@_tool
+def what_if(metric: MetricArg, change_type: ChangeTypeArg, change_value: ChangeValueArg, where_dimension: WhereDimArg = None,
+            where_value: WhereValueArg = None, effect_on: EffectOnArg = None, period_from: FromArg = None, period_to: ToArg = None,
+            last_months: LastMonthsArg = None, last_days: LastDaysArg = None, horizon: HorizonArg = None) -> dict:
+    """Вопросы «что если…»: что будет с итогом и связанными показателями, если значение показателя изменится (в целом или
+    в одном срезе: канале, сегменте, отделе). Даёт арифметику по окну (точно), эффект на показатели с формулой связи
+    (точно), оценку по истории для показателей без формулы (приблизительно, с интервалом) и прогноз на ближайшие периоды
+    «если ничего не менять» и «со сценарием». Для вопроса «что будет дальше» без изменений вызывайте forecast_metric."""
+    t = datastore.get_table()
+    m = E.find_metric(t, metric)
+    try:
+        value = float(change_value)
+    except (TypeError, ValueError):
+        raise ToolError("change_value должно быть числом.") from None
+    ctype = W.normalize_change_type(change_type)
+    win, note = E.resolve_window(t, period_from, period_to, last_months, last_days)
+    where = E.resolve_where(t, where_dimension, where_value)
+    out = {"metric": m.name, "unit": m.unit, "better": BETTER_WORD[m.better], "definition": m.definition(), "period": _period(t, win)}
+    if note:
+        out["note"] = note
+    out.update(W.build_scenario(t, m, win, where, ctype, value, effect_on, horizon))
+    return out
+
+
+@_tool
+def forecast_metric(metric: MetricArg, horizon: HorizonArg = None, where_dimension: WhereDimArg = None,
+                    where_value: WhereValueArg = None) -> dict:
+    """Прогноз показателя «если ничего не менять»: значения на ближайшие периоды с интервалом 80%, метод, тренд и
+    надёжность (по длине истории и ошибке на прошлых периодах). Для вопросов «что будет с показателем», «каким будет
+    значение через 3 месяца». Для вопросов «что если изменить…» вызывайте what_if."""
+    t = datastore.get_table()
+    m = E.find_metric(t, metric)
+    where = E.resolve_where(t, where_dimension, where_value)
+    out = {"metric": m.name, "unit": m.unit, "better": BETTER_WORD[m.better], "definition": m.definition()}
+    if where:
+        out["filter"] = {d: v for d, v in where}
+    out["forecast"] = W.build_forecast(t, m, horizon, where)
+    return out
+
+
 TOOLS: dict[str, Callable[..., dict]] = {
     fn.__name__: fn for fn in (describe_dataset, find_metrics, get_change, break_down, get_related_metrics,
-                               get_goal_info, diagnose_change, get_structure)
+                               get_goal_info, diagnose_change, get_structure, what_if, forecast_metric)
 }

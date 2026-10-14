@@ -677,15 +677,20 @@ def suggest_questions(t: Table) -> list[str]:
         return ["Почему мы отстаём по цели роста розничного кредитования и что делать?",
                 "Почему растёт просрочка и в каком сегменте?",
                 "Что происходит с комиссионными доходами за последние 3 месяца?",
-                "Есть ли проблемы с оттоком клиентов?"]
+                "Что будет, если отток клиентов снизится на 10%?"]
     findings = [name for name, _ in top_findings(t, 2)]
     names = findings or [m.name for m in t.spec.metrics[:2]]
     questions = [f"Что изменилось с показателем «{n}» за последний период и почему?" for n in names]
     if t.dims:
         questions.append(f"Какие значения измерения «{t.dims[0]}» дали основной вклад в изменение «{names[0]}»?")
-    others = [m.name for m in t.spec.metrics if m.name not in names][:1]
-    if others:
-        questions.append(f"Есть ли проблемы с показателем «{others[0]}»?")
+    metric = t.metric(names[0])
+    if metric is not None:  # вопрос про сценарий: куда повернёт показатель, если он изменится на 10% в лучшую сторону
+        word = "снизится" if metric.better == "down" else "вырастет"
+        questions.append(f"Что будет, если «{metric.name}» {word} на 10%?")
+    else:
+        others = [m.name for m in t.spec.metrics if m.name not in names][:1]
+        if others:
+            questions.append(f"Есть ли проблемы с показателем «{others[0]}»?")
     return questions[:4]
 
 

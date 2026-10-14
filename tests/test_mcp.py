@@ -15,6 +15,8 @@ EXPECTED_TOOLS = {
     "get_goal_info",
     "diagnose_change",
     "get_structure",
+    "what_if",
+    "forecast_metric",
 }
 
 

@@ -50,6 +50,9 @@ class FakeLLM:
             raise self.chat_exc
         if self.dashboard and DIGEST_OPEN in messages[-1]["content"]:  # запрос плана дашборда: отвечает как заглушка
             return ScriptedLLM().chat(messages, None)
+        if functions and functions[0]["name"] == "what_if":
+            call = FunctionCall("what_if", {"metric": "NPS", "change_type": "pct", "change_value": 10}) if self.calls_function else None
+            return LLMResponse(content="" if call else "Будет лучше", function_call=call, usage=Usage(5, 5, 10))
         if functions:
             call = FunctionCall("get_change", {"metric": "NPS"}) if self.calls_function else None
             return LLMResponse(content="" if call else "Отклонение небольшое", function_call=call, usage=Usage(5, 5, 10))
@@ -202,6 +205,15 @@ def test_chat_failure_is_explained(env):
 def test_model_that_ignores_functions_gets_a_warning_not_a_failure(env):
     results, text = run(env, FakeLLM(calls_function=False))
     assert statuses(results)["Вызов функций"] == cg.WARN and "GigaChat-2-Max" in text
+
+
+def test_what_if_step_passes_when_the_model_calls_the_tool_and_warns_otherwise(env):
+    results, _ = run(env)
+    step = next(r for r in results if r.title.startswith("Вопрос «что если»"))
+    assert step.status == cg.OK and "what_if" in step.detail
+    results, text = run(env, FakeLLM(calls_function=False))
+    step = next(r for r in results if r.title.startswith("Вопрос «что если»"))
+    assert step.status == cg.WARN and "GigaChat-2-Max" in step.fix and not any(r.status == cg.FAIL for r in results), text
 
 
 def test_dashboard_step_passes_when_the_model_returns_a_good_plan(env):
