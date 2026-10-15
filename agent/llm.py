@@ -83,7 +83,7 @@ class LLMClient(Protocol):
 
 def llm_sends_data_out(llm) -> bool:
     """Уходят ли данные отчёта с этого компьютера. Заглушка и тестовые клиенты ничего не отправляют; для проверки
-    интерфейса PRISMA_FORCE_CONSENT=1 заставляет считать, что отправляют все."""
+    интерфейса PRISM_FORCE_CONSENT=1 заставляет считать, что отправляют все."""
     return llm is not None and (force_consent() or bool(getattr(llm, "sends_data_out", False)))
 
 

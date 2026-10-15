@@ -101,7 +101,7 @@ def create_app(
         yield
         adapter.close()
 
-    app = FastAPI(title="PRISMA: анализ отчётов и KPI", lifespan=lifespan)
+    app = FastAPI(title="PRISM: анализ отчётов и KPI", lifespan=lifespan)
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:

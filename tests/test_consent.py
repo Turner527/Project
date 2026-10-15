@@ -105,11 +105,11 @@ def test_clients_declare_whether_they_send_data_out(tmp_path):
 
 def test_force_consent_env_makes_any_client_ask(monkeypatch):
     for value in ("1", "true", "YES", " on "):
-        monkeypatch.setenv("PRISMA_FORCE_CONSENT", value)
+        monkeypatch.setenv("PRISM_FORCE_CONSENT", value)
         assert llm_sends_data_out(ScriptedLLM()) is True and llm_sends_data_out(FakeLLM([])) is True
         assert llm_sends_data_out(None) is False  # модели нет — отправлять нечего
     for value in ("", "0", "no", "off"):
-        monkeypatch.setenv("PRISMA_FORCE_CONSENT", value)
+        monkeypatch.setenv("PRISM_FORCE_CONSENT", value)
         assert llm_sends_data_out(ScriptedLLM()) is False
 
 
@@ -125,7 +125,7 @@ def test_the_offline_stub_never_needs_consent(store):
 
 def test_forced_consent_applies_to_the_stub_and_is_checked_on_every_request(store, monkeypatch):
     with app_client(store, ScriptedLLM()) as client:
-        monkeypatch.setenv("PRISMA_FORCE_CONSENT", "1")
+        monkeypatch.setenv("PRISM_FORCE_CONSENT", "1")
         assert client.get("/api/status").json()["consent_required"] is True
         assert_consent_required(client.post("/api/ask", json={"question": DEMO_QUESTION}))
         preview = client.get("/api/preview").json()
@@ -133,7 +133,7 @@ def test_forced_consent_applies_to_the_stub_and_is_checked_on_every_request(stor
         consent(client)
         assert client.get("/api/status").json()["consent_required"] is False
         assert client.post("/api/ask", json={"question": DEMO_QUESTION}).status_code == 200
-        monkeypatch.delenv("PRISMA_FORCE_CONSENT")
+        monkeypatch.delenv("PRISM_FORCE_CONSENT")
         assert client.get("/api/status").json()["consent_required"] is False
 
 

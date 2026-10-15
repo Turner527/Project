@@ -53,6 +53,6 @@ def _walk(obj, fn):
 
 
 def force_consent() -> bool:
-    """PRISMA_FORCE_CONSENT=1 — только для проверки и разработки: офлайн-заглушка ведёт себя так, будто данные уходят
+    """PRISM_FORCE_CONSENT=1 — только для проверки и разработки: офлайн-заглушка ведёт себя так, будто данные уходят
     наружу (показывается окно «Что уйдёт в GigaChat»). В обычной работе не задаётся."""
-    return os.getenv("PRISMA_FORCE_CONSENT", "").strip().lower() in _TRUE
+    return os.getenv("PRISM_FORCE_CONSENT", "").strip().lower() in _TRUE
