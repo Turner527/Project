@@ -149,3 +149,26 @@ def test_verify_accepts_a_rounded_amount_written_with_a_multiplier():
 
 def test_grouped_numbers_with_non_breaking_spaces_are_whole_numbers():
     assert values("расходы 2\u00a0819\u00a0730 руб., 12\u202f345 шт.") == [(2819730.0, 0), (12345.0, 0)]
+
+
+def test_multiplier_after_the_second_edge_of_a_range_applies_to_both_edges():
+    from agent.verifier import extract_numbers
+
+    nums = extract_numbers("интервал 590–847 тыс. руб")
+    assert [n.multiplier for n in nums] == [1e3, 1e3]
+    result = verify({"a": "интервал 590–847 тыс. руб"}, [type("C", (), {"call_id": "c_1", "result": {"low": 590_000, "high": 847_000}})()])
+    assert result.status == STATUS_OK, result.unverified
+    # без множителя после диапазона остальные числа не затрагиваются
+    assert [n.multiplier for n in extract_numbers("от 30 до 50 дней")] == [1.0, 1.0]
+    assert [n.multiplier for n in extract_numbers("5 руб и 7 млн")] == [1.0, 1e6]  # между числами стоит «руб», это не диапазон
+
+
+def test_reliability_numbers_are_citable_numeric_fields():
+    import numpy as np
+
+    from tools.forecast import forecast_series
+
+    res = forecast_series(list(100 + 2 * np.arange(30)), 3, None)
+    cited = "Надёжность высокая: история 30 периодов при пороге 24, проверок 6 при пороге 4."
+    check = verify({"a": cited}, [type("C", (), {"call_id": "c_1", "result": res})()])
+    assert check.status == STATUS_OK, check.unverified

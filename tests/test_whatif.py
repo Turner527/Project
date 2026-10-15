@@ -79,8 +79,15 @@ def test_abs_change_of_a_ratio_changes_the_rate_and_keeps_volume(marketing):
     leads_after = raw["Лиды"].sum() - email["Лиды"].sum() + (rate_email + 2) / 100 * email["Клики"].sum()
     assert close(res["total"]["before"], raw["Лиды"].sum() / raw["Клики"].sum() * 100)
     assert close(res["total"]["after"], leads_after / raw["Клики"].sum() * 100)
-    assert "effects" not in res  # ставка изменена, объём (клики) тот же: формульных следствий нет
     assert any("ставка" in a for a in res["assumptions"])
+    # числитель ставки (лиды) меняется ровно на «ставка × клики среза»: это точная арифметика, а не оценка по истории
+    effects = {e["metric"]: e for e in res["effects"]}
+    leads_total = raw["Лиды"].sum()
+    assert close(effects["Лиды"]["before"], leads_total) and close(effects["Лиды"]["after"], leads_after)
+    assert effects["Лиды"]["relation"].startswith("формула") and "сумму" in effects["Лиды"]["relation"] or "сумма" in effects["Лиды"]["relation"]
+    next_step = effects["Конверсия лидов в заказы"]  # лиды у неё в знаменателе: Заказы / Лиды
+    assert close(next_step["before"], raw["Заказы"].sum() / leads_total * 100) and close(next_step["after"], raw["Заказы"].sum() / leads_after * 100)
+    assert all(e["relation"].startswith("формула") for e in res["effects"])  # ни одной оценки по истории
 
 
 def test_set_value_and_percent_of_the_whole_report(marketing):
@@ -105,8 +112,13 @@ def test_last_value_metric_changes_only_the_closing_period():
 
 
 @pytest.mark.parametrize("kwargs, text", [
-    ({"metric": "Расходы", "change_type": "pct", "change_value": -100}, "100"),
-    ({"metric": "Расходы", "change_type": "pct", "change_value": -150}, "100"),
+    ({"metric": "Расходы", "change_type": "pct", "change_value": -150}, "минимум −100"),
+    ({"metric": "Расходы", "change_type": "abs", "change_value": -1e12}, "отрицательным"),
+    ({"metric": "Расходы", "change_type": "set", "change_value": -5}, "отрицательным"),
+    ({"metric": "Расходы", "change_type": "pct", "change_value": 5, "horizon": 0}, "от 1 до 24"),
+    ({"metric": "Расходы", "change_type": "pct", "change_value": 5, "horizon": 25}, "от 1 до 24"),
+    ({"metric": "Расходы", "change_type": "pct", "change_value": 5, "horizon": 2.5}, "от 1 до 24"),
+    ({"metric": "Расходы", "change_type": "pct", "change_value": 5, "horizon": "много"}, "от 1 до 24"),
     ({"metric": "Расходы", "change_type": "умножить", "change_value": 1}, "change_type"),
     ({"metric": "Нет такого", "change_type": "pct", "change_value": 5}, "не найден"),
     ({"metric": "Расходы", "change_type": "pct", "change_value": 5, "where_dimension": "Канал", "where_value": "Телепорт"}, "нет в измерении"),
@@ -114,7 +126,8 @@ def test_last_value_metric_changes_only_the_closing_period():
     ({"metric": "Расходы", "change_type": "pct", "change_value": "много"}, "числом"),
 ])
 def test_invalid_requests_return_clear_errors(marketing, kwargs, text):
-    res = core.what_if(**kwargs, horizon=None)
+    kwargs = {"horizon": None, **kwargs}
+    res = core.what_if(**kwargs)
     assert "error" in res and text in res["error"]
 
 
@@ -382,3 +395,231 @@ def test_horizon_total_interval_is_for_the_sum_not_for_the_last_period(linear_mo
     assert item["horizon_total_high"] == pytest.approx(sum(item["high"]), abs=0.02)
     assert item["horizon_total_low"] <= item["horizon_total_baseline"] <= item["horizon_total_high"]
     assert item["horizon_total_low"] > item["low"][-1]  # интервал суммы не путается с интервалом последнего периода
+
+
+# ---------- исправления по независимой проверке ----------
+
+
+def test_minus_100_percent_switches_the_slice_off_and_is_allowed(marketing):
+    raw = marketing
+    res = core.what_if("Расходы", "pct", -100, where_dimension="Канал", where_value="Email", horizon=None)
+    assert "error" not in res and close(res["selection_value"]["after"], 0)
+    assert close(res["total"]["after"], raw["Расходы, руб"].sum() - raw.loc[raw["Канал"] == "Email", "Расходы, руб"].sum())
+
+
+def test_string_effect_on_is_one_metric_and_not_a_set_of_letters(history):
+    res = core.what_if("Расход", "pct", 10, effect_on="Заказы", last_months=1, horizon=None)
+    assert [e["metric"] for e in res["effects"] if e["relation"] == "оценка по истории"] == ["Заказы"]
+    assert "not_estimated" not in res or all(len(x["metric"]) > 1 for x in res["not_estimated"])
+
+
+def test_tool_does_not_leak_private_working_fields(history):
+    res = core.what_if("Расход", "pct", 10, effect_on=["Заказы"], last_months=1, horizon=3)
+    assert "_" not in "".join(k[:1] for k in json.dumps(res).split('"') if k.startswith("_"))
+    def keys(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                yield k
+                yield from keys(v)
+        elif isinstance(o, list):
+            for v in o:
+                yield from keys(v)
+    assert not [k for k in keys(res) if str(k).startswith("_")]
+
+
+@pytest.fixture()
+def loss_months(tmp_path, monkeypatch):
+    n = 24
+    spend = 100.0 + 3.0 * np.arange(n)  # убыток растёт: значения отрицательные
+    df = pd.DataFrame({"Месяц": months(n), "Profit": -spend, "Cost": spend * 0.5})
+    spec = {"date": "Месяц", "dimensions": [], "metrics": [metric("Прибыль", "Profit"), metric("Затраты", "Cost", better="down")], "filters": [], "significant_pct": 3.0}
+    activate_custom(tmp_path, monkeypatch, df, spec)
+    return df
+
+
+def test_percent_of_a_negative_value_moves_it_in_the_stated_direction(loss_months):
+    res = core.what_if("Прибыль", "pct", 10, last_months=1, horizon=3)  # убыток −170: «+10%» → −153, это лучше
+    assert close(res["total"]["before"], -169.0) and close(res["total"]["after"], -169.0 + 16.9)
+    assert res["total"]["delta_abs"] > 0 and res["total"]["delta_pct"] == 10.0 and res["total"]["verdict"] == "лучше"
+    item = res["forecast"]["metrics"][0]
+    assert all(s > b for s, b in zip(item["scenario"], item["baseline"]))  # сценарий выше базового, а не ниже
+    assert item["horizon_total_delta"] > 0
+    down = core.what_if("Прибыль", "pct", -10, last_months=1, horizon=3)
+    assert down["total"]["verdict"] == "хуже" and all(s < b for s, b in zip(down["forecast"]["metrics"][0]["scenario"], down["forecast"]["metrics"][0]["baseline"]))
+
+
+def test_history_estimate_on_a_negative_target_is_ordered_and_signed(tmp_path, monkeypatch):
+    rng = np.random.RandomState(5)
+    n = 30
+    growth = 0.1 * np.sin(np.arange(n) * 1.1) + rng.normal(0, 0.02, n)
+    driver = 100 * np.cumprod(1 + growth)
+    target = np.empty(n)
+    target[0] = -400.0
+    for i in range(1, n):  # относительные изменения от модуля: отрицательная цель растёт вдвое слабее драйвера
+        target[i] = target[i - 1] + abs(target[i - 1]) * 0.5 * (driver[i] - driver[i - 1]) / driver[i - 1]
+    df = pd.DataFrame({"Месяц": months(n), "D": driver, "T": target})
+    spec = {"date": "Месяц", "dimensions": [], "metrics": [metric("Драйвер", "D"), metric("Цель", "T")], "filters": [], "significant_pct": 3.0}
+    activate_custom(tmp_path, monkeypatch, df, spec)
+    res = core.what_if("Драйвер", "pct", 10, effect_on=["Цель"], last_months=1, horizon=None)
+    est = next(e for e in res["effects"] if e["metric"] == "Цель")
+    assert abs(est["estimate"]["effect_pct"] - 5.0) < 0.2
+    assert est["after_low"] <= est["after"] <= est["after_high"] and est["after"] > est["before"] and est["verdict"] == "лучше"
+    assert abs(est["after"] - (target[-1] + abs(target[-1]) * 0.05)) < 0.02 * abs(target[-1])
+
+
+def test_weekday_only_daily_data_is_forecast_by_weeks_without_inventing_weekends(tmp_path, monkeypatch):
+    days = pd.bdate_range("2026-01-05", periods=150)  # только будни, неделя из пяти дней — полная
+    rng = np.random.RandomState(2)
+    df = pd.DataFrame({"Дата": days, "Spend": 100.0 + rng.normal(0, 3, len(days)), "Orders": 10.0 + rng.normal(0, 0.5, len(days))})
+    spec = {"date": "Дата", "dimensions": [], "metrics": [metric("Расход", "Spend", better="down"), metric("Заказы", "Orders")], "filters": [], "significant_pct": 3.0}
+    activate_custom(tmp_path, monkeypatch, df, spec)
+    fc = core.forecast_metric("Расход", horizon=2)["forecast"]
+    item = fc["metrics"][0]
+    assert fc["bucket"] == "week" and "пропуски" in fc["bucket_note"] and item["filled"] == 0
+    assert item["history_n"] >= 25  # не две точки: будние недели не считаются неполными
+    assert 450 < item["baseline"][0] < 560  # неделя из пяти рабочих дней, а не семи
+    what = core.what_if("Расход", "pct", 10, effect_on=["Заказы"], horizon=2)
+    assert what["forecast"]["bucket"] == "week"
+    assert all(x["metric"] != "Заказы" or "n_periods" not in x or x["n_periods"] > 0 for x in what.get("not_estimated", []))
+
+
+def test_all_forecast_metrics_share_one_period_grid(tmp_path, monkeypatch):
+    days = pd.date_range("2026-01-07", periods=150, freq="D")  # среда ... пятница: недели по краям неполные
+    rng = np.random.RandomState(4)
+    df = pd.DataFrame({"Дата": days, "Spend": 100.0 + rng.normal(0, 4, 150), "Orders": 20.0 + rng.normal(0, 1, 150)})
+    ratio = {"name": "Цена", "kind": "ratio", "num": "Spend", "den": "Orders", "unit": "руб", "better": "down", "scale": 1}
+    spec = {"date": "Дата", "dimensions": [], "metrics": [metric("Расход", "Spend", better="down"), metric("Заказы", "Orders"), ratio], "filters": [], "significant_pct": 3.0}
+    activate_custom(tmp_path, monkeypatch, df, spec)
+    fc = core.what_if("Расход", "pct", 10, horizon=3)["forecast"]
+    assert len(fc["metrics"]) >= 2
+    assert len({tuple(i["history"]["dates"]) for i in fc["metrics"]}) == 1  # у отношения ряд не длиннее, чем у суммы
+    assert fc["metrics"][0]["history"]["labels"][-1] == "2026-05-25" and fc["labels"][0] == "2026-06-01"
+
+
+def test_incomplete_edge_month_is_dropped_for_long_weekly_data(tmp_path, monkeypatch):
+    weeks = pd.date_range("2022-01-03", periods=300, freq="W-MON")  # 300 недель: больше предела исходной детализации
+    df = pd.DataFrame({"Неделя": weeks, "Spend": 100.0 + np.sin(np.arange(300)) * 2})
+    spec = {"date": "Неделя", "dimensions": [], "metrics": [metric("Расход", "Spend")], "filters": [], "significant_pct": 3.0}
+    activate_custom(tmp_path, monkeypatch, df, spec)
+    fc = core.forecast_metric("Расход", horizon=2)["forecast"]
+    item = fc["metrics"][0]
+    last_week = weeks[-1]
+    assert fc["bucket"] in ("month", "quarter")
+    end = pd.Timestamp(item["history"]["dates"][-1])
+    assert end + pd.offsets.MonthEnd(1) <= last_week + pd.offsets.Week(weekday=6) or fc["bucket"] == "quarter"  # корзина целиком в диапазоне данных
+    assert item["last_actual"] > 300 if fc["bucket"] == "month" else item["last_actual"] > 1000  # не «обрубок» из пары недель
+
+
+@pytest.fixture()
+def branches_like(tmp_path, monkeypatch):
+    n = 24
+    rng = np.random.RandomState(8)
+    income = 1000 + 30 * np.arange(n) + rng.normal(0, 20, n)
+    cost = 600 + 10 * np.arange(n) + rng.normal(0, 15, n)
+    df = pd.DataFrame({"Месяц": months(n), "Income": income, "Cost": cost, "Профит": income - cost, "Профит2": income - cost})
+    ratio = {"name": "Маржа", "kind": "ratio", "num": "Income - Cost", "den": "Income", "unit": "%", "better": "up", "scale": 100}
+    spec = {"date": "Месяц", "dimensions": [], "metrics": [metric("Доход", "Income"), metric("Расходы", "Cost", better="down"),
+                                                           metric("Прибыль", "Income - Cost"), ratio], "filters": [], "significant_pct": 3.0}
+    activate_custom(tmp_path, monkeypatch, df, spec)
+    return income, cost
+
+
+def test_expression_metrics_are_linked_through_their_terms_with_the_right_sign(branches_like):
+    income, cost = branches_like
+    D, R = income[-1], cost[-1]
+    res = core.what_if("Доход", "pct", 10, last_months=1, horizon=None)
+    effects = {e["metric"]: e for e in res["effects"]}
+    assert close(effects["Прибыль"]["before"], D - R) and close(effects["Прибыль"]["after"], D - R + 0.1 * D)  # слагаемое «Доход» входит с плюсом
+    assert close(effects["Маржа"]["before"], (D - R) / D * 100) and close(effects["Маржа"]["after"], (D * 1.1 - R) / (D * 1.1) * 100)
+    assert effects["Маржа"]["after"] > effects["Маржа"]["before"] and effects["Маржа"]["verdict"] == "лучше"  # прежняя ошибка давала «хуже»
+    assert "числитель и знаменатель" in effects["Маржа"]["relation"]
+    cost_up = core.what_if("Расходы", "pct", 10, last_months=1, horizon=None)
+    eff = {e["metric"]: e for e in cost_up["effects"]}
+    assert close(eff["Прибыль"]["after"], D - R - 0.1 * R)  # «Расходы» входят с минусом
+    assert close(eff["Маржа"]["after"], (D - R * 1.1) / D * 100) and eff["Маржа"]["verdict"] == "хуже"
+
+
+def test_changing_a_ratio_recomputes_its_numerator_expression_exactly(branches_like):
+    income, cost = branches_like
+    D, R = income[-1], cost[-1]
+    res = core.what_if("Маржа", "abs", 5, last_months=1, horizon=None)  # ставка +5 п.п. при том же объёме дохода
+    assert close(res["total"]["after"], (D - R) / D * 100 + 5)
+    effects = {e["metric"]: e for e in res["effects"]}
+    assert close(effects["Прибыль"]["after"], D - R + 0.05 * D)  # числитель «Доход - Расходы» вырос на 5% дохода
+    assert all(e["relation"].startswith("формула") for e in res["effects"])
+
+
+def test_effect_percent_is_not_rounded_before_the_forecast(linear_months):
+    res = core.what_if("Расход", "pct", 0.04, horizon=3)  # на круглом округлении до 0,1% такой эффект бы пропал
+    item = next(i for i in res["forecast"]["metrics"] if i["metric"] == "Расход")
+    assert item["scenario"] != item["baseline"] and item["horizon_total_delta"] > 0 and item["effect_pct"] == 0.0
+
+
+def test_small_scale_series_are_estimated_from_unrounded_values(tmp_path, monkeypatch):
+    rng = np.random.RandomState(6)
+    n = 30
+    growth = 0.1 * np.sin(np.arange(n) * 1.2) + rng.normal(0, 0.02, n)
+    driver = 0.3 * np.cumprod(1 + growth)  # значения 0,1–1: две цифры после запятой исказили бы наклон
+    target = np.empty(n)
+    target[0] = 0.5
+    for i in range(1, n):
+        target[i] = target[i - 1] * (1 + 0.5 * (driver[i] - driver[i - 1]) / driver[i - 1])
+    df = pd.DataFrame({"Месяц": months(n), "D": driver, "T": target})
+    spec = {"date": "Месяц", "dimensions": [], "metrics": [metric("Драйвер", "D"), metric("Цель", "T")], "filters": [], "significant_pct": 3.0}
+    activate_custom(tmp_path, monkeypatch, df, spec)
+    est = next(e for e in core.what_if("Драйвер", "pct", 10, effect_on=["Цель"], last_months=1, horizon=None)["effects"] if e["metric"] == "Цель")
+    assert est["estimate"]["sensitivity"] == 0.5 and est["estimate"]["correlation"] >= 0.999
+
+
+def test_interpolated_points_lower_the_reliability_and_are_reported(tmp_path, monkeypatch):
+    n = 24
+    values = 100.0 + 2.0 * np.arange(n)
+    df = pd.DataFrame({"Месяц": months(n), "Spend": values}).drop(index=[4, 9, 14, 19])  # 4 из 24 месяцев пропущены
+    spec = {"date": "Месяц", "dimensions": [], "metrics": [metric("Расход", "Spend")], "filters": [], "significant_pct": 3.0}
+    activate_custom(tmp_path, monkeypatch, df, spec)
+    item = core.forecast_metric("Расход", horizon=3)["forecast"]["metrics"][0]
+    assert item["filled"] == 4 and item["reliability"]["level"] != "высокая"
+    assert any("интерполяц" in r_ for r_ in item["reliability"]["reasons"])
+
+
+def test_effects_beyond_the_limit_are_counted_not_silently_dropped(tmp_path, monkeypatch):
+    n = 12
+    cols = {f"V{i}": 10.0 + i for i in range(9)}
+    df = pd.DataFrame({"Месяц": months(n), "Base": 100.0 + np.arange(n), **{k: v + np.arange(n) for k, v in cols.items()}})
+    ratios = [{"name": f"Доля {i}", "kind": "ratio", "num": "Base", "den": f"V{i}", "unit": "", "better": "up", "scale": 1} for i in range(9)]
+    spec = {"date": "Месяц", "dimensions": [], "metrics": [metric("База", "Base"), *[metric(f"V{i}", f"V{i}") for i in range(9)], *ratios], "filters": [], "significant_pct": 3.0}
+    activate_custom(tmp_path, monkeypatch, df, spec)
+    res = core.what_if("База", "pct", 10, last_months=1, horizon=None)
+    assert len(res["effects"]) == W.MAX_EFFECTS and res["effects_omitted"] > 0
+    assert any("не все" in a for a in res["assumptions"])
+
+
+@pytest.mark.parametrize("question, expected", [
+    ("Что если расходы снизятся на 10%?", ("pct", -10)),
+    ("Что будет, если расходы на Поиск снизятся на 20 процентов?", ("pct", -20)),
+    ("Что если конверсия вырастет на 2 п.п.?", ("abs", 2)),
+    ("Что если расходы на 10% снизятся?", ("pct", -10)),
+    ("Что будет, если расходы на Ростов вырастут на 10%?", ("pct", 10)),
+    ("Что если расходы изменятся на -20%?", ("pct", -20)),
+    ("Что если расходы изменятся на +15%?", ("pct", 15)),
+    ("Что если цена ниже плана вырастет на 5%?", ("pct", 5)),
+    ("Что если рост расходов составит 7%?", ("pct", 7)),
+    ("Что если в Поиске расходы сократим на 12,5 процента?", ("pct", -12.5)),
+])
+def test_stub_reads_amount_sign_and_unit_correctly(question, expected):
+    from agent.stub_llm import _change_args
+
+    args = _change_args(question)
+    assert (args["change_type"], args["change_value"]) == expected
+
+
+def test_stub_does_not_guess_a_direction():
+    from agent.stub_llm import _change_args
+
+    assert _change_args("Что будет, если расходы изменятся на 10%?") is None
+
+
+def test_stub_percent_unit_differences_are_in_points():
+    from agent.stub_llm import ScriptedLLM
+
+    assert ScriptedLLM._du("%") == " п.п." and ScriptedLLM._du("руб") == " руб" and ScriptedLLM._du("") == ""

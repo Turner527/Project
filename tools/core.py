@@ -331,9 +331,10 @@ EffectOnArg = Annotated[list[str] | None, Field(description="Показател�
                                                              "считаются сам показатель и показатели, связанные с ним формулой. "
                                                              "Назовите здесь показатель без формулы связи (например заказы при "
                                                              "изменении расходов): будет оценка по истории с интервалом и оговоркой")]
-HorizonArg = Annotated[int | None, Field(description="На сколько периодов вперёд строить прогноз (в тех же корзинах, что и график: "
-                                                      "дни, недели, месяцы). Не указано — подбирается по детализации "
-                                                      "(неделя, 4 недели, 3 месяца)", ge=1, le=24)]
+HorizonArg = Annotated[int | None, Field(description="На сколько периодов вперёд строить прогноз, целое от 1 до 24. Период — шаг "
+                                                      "ряда: день, неделя или месяц (ответ называет его в unit_word; у данных с "
+                                                      "выходными ряд берётся по неделям). Не указано — подбирается по "
+                                                      "детализации (7 дней, 4 недели, 3 месяца, 2 квартала)", ge=1, le=24)]
 
 
 @_tool
@@ -351,6 +352,7 @@ def what_if(metric: MetricArg, change_type: ChangeTypeArg, change_value: ChangeV
     except (TypeError, ValueError):
         raise ToolError("change_value должно быть числом.") from None
     ctype = W.normalize_change_type(change_type)
+    horizon = W.normalize_horizon(horizon)
     win, note = E.resolve_window(t, period_from, period_to, last_months, last_days)
     where = E.resolve_where(t, where_dimension, where_value)
     out = {"metric": m.name, "unit": m.unit, "better": BETTER_WORD[m.better], "definition": m.definition(), "period": _period(t, win)}
@@ -368,6 +370,7 @@ def forecast_metric(metric: MetricArg, horizon: HorizonArg = None, where_dimensi
     значение через 3 месяца». Для вопросов «что если изменить…» вызывайте what_if."""
     t = datastore.get_table()
     m = E.find_metric(t, metric)
+    horizon = W.normalize_horizon(horizon)
     where = E.resolve_where(t, where_dimension, where_value)
     out = {"metric": m.name, "unit": m.unit, "better": BETTER_WORD[m.better], "definition": m.definition()}
     if where:

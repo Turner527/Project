@@ -66,14 +66,14 @@ def _aggregate(df: pd.DataFrame, m: Metric) -> pd.DataFrame:
     return pd.DataFrame(cols)
 
 
-def _values(agg: pd.DataFrame, m: Metric, index: pd.DatetimeIndex) -> list[float | None]:
+def _values(agg: pd.DataFrame, m: Metric, index: pd.DatetimeIndex, exact: bool = False) -> list[float | None]:
     agg = agg.reindex(index)
     if m.kind in ("mean", "ratio"):
         d = agg["D"].replace(0, np.nan)
         v = m.scale * agg["N"] / d
     else:
         v = m.scale * agg["N"]
-    return [None if pd.isna(x) else r(x) for x in v]
+    return [None if pd.isna(x) else (float(x) if exact else r(x)) for x in v]
 
 
 def _plan_values(agg: pd.DataFrame, m: Metric, index: pd.DatetimeIndex) -> list[float | None] | None:
@@ -99,12 +99,13 @@ def _partial(df: pd.DataFrame, m: Metric, t: Table, bucket: str, index: pd.Datet
 
 
 def series(t: Table, m: Metric, *, where=(), by: str | None = None, window: Window | None = None,
-           bucket: str | None = None, max_values: int = 5) -> dict:
+           bucket: str | None = None, max_values: int = 5, exact: bool = False) -> dict:
     """Ряд показателя по корзинам времени.
 
     Возвращает {"bucket", "labels", "dates", "partial", "series": [{"name", "values"}], "plan", "others"}; пропущенные
     корзины — None; partial отмечает корзины с данными не за все дни (для сумм по дневным данным).
     by — разрезать по значениям измерения (до max_values самых весомых; остальные считаются в "others").
+    exact — значения без округления (для расчётов: оценка по истории и прогноз не должны считаться по округлённым числам).
     """
     if t.grain is None:
         return {"bucket": None, "labels": [], "dates": [], "partial": [], "series": [], "plan": None, "others": 0}
@@ -124,14 +125,14 @@ def series(t: Table, m: Metric, *, where=(), by: str | None = None, window: Wind
            "partial": _partial(df, m, t, bucket, index), "plan": None, "others": 0}
     if by is None:
         agg = _aggregate(df, m)
-        out["series"] = [{"name": m.name, "values": _values(agg, m, index)}]
+        out["series"] = [{"name": m.name, "values": _values(agg, m, index, exact)}]
         out["plan"] = _plan_values(agg, m, index)
         return out
     weight = m.D if m.kind in ("mean", "ratio") else m.N
     ranked = df.groupby(by)[weight].apply(lambda s: float(s.abs().sum())).sort_values(ascending=False, kind="stable")
     keep = list(ranked.index[:max_values])
     out["others"] = max(len(ranked) - len(keep), 0)
-    out["series"] = [{"name": str(v), "values": _values(_aggregate(df[df[by] == v], m), m, index)} for v in keep]
+    out["series"] = [{"name": str(v), "values": _values(_aggregate(df[df[by] == v], m), m, index, exact)} for v in keep]
     return out
 
 

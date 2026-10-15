@@ -42,6 +42,7 @@ sigma_h = sigma_1 * sqrt(h); sigma_h не убывает с ростом h. По
 Функция чистая: тот же вход даёт тот же результат, случайности и глобального состояния нет.
 """
 import math
+import re
 import operator
 from statistics import NormalDist
 
@@ -249,6 +250,16 @@ def _int_arg(value, name: str, lo: int, hi: int | None = None) -> int:
     return v
 
 
+def _numbers_in(texts: list[str]) -> list[float]:
+    """Числа из текстов причин как числа: верификатор сверяет ответ с числовыми полями, а не со строками, поэтому порог
+    «не меньше 24» из причины надёжности можно процитировать, не получив пометку «непроверенное число»."""
+    found = []
+    for text in texts:
+        for raw in re.findall(r"\d+(?:[.,]\d+)?", text):
+            found.append(float(raw.replace(",", ".")))
+    return list(dict.fromkeys(found))
+
+
 def _reliability(n: int, folds: int, rel_pct: float, fell_back: bool, folds_regular: int) -> tuple[str, list[str]]:
     low = []
     if n < LOW_HISTORY:
@@ -368,4 +379,4 @@ def _forecast(y: np.ndarray, filled: int, horizon: int, season: int | None, nonn
             "history_n": n, "filled": filled,
             "backtest": {"folds": folds, "mae": r(mae), "rmse": r(rmse), "mape_pct": r(mape)},
             "trend": {"slope_per_period": r(slope), "direction": direction},
-            "reliability": {"level": level, "reasons": reasons}}
+            "reliability": {"level": level, "reasons": reasons, "numbers": _numbers_in(reasons)}}

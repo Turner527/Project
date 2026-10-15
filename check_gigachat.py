@@ -240,7 +240,7 @@ def check_what_if(llm: GigaChatLLM) -> Result:
         value = float(args.get("change_value"))
     except (TypeError, ValueError):
         value = None
-    if str(args.get("change_type", "")).strip().lower() in CHANGE_ALIASES and value == 10:
+    if CHANGE_ALIASES.get(str(args.get("change_type", "")).strip().lower()) == "pct" and value == 10:
         return Result(OK, title, f"модель вызвала what_if с аргументами {args}")
     return Result(WARN, title, f"модель вызвала what_if, но аргументы неверны: {args}.",
                   "Ожидалось change_type pct и change_value 10. Если так будет и дальше, возьмите модель посильнее.")

@@ -24,6 +24,7 @@ _NUMBER = re.compile(
 _UNIT_AFTER = re.compile(r"^\s?(?:%|п\.\s?п\.|пп\b|процент|млрд|млн|тыс|пункт|мин\b|₽|руб|раз\b)", re.I)
 _MULTIPLIER = re.compile(r"^\s?(тыс|млн|млрд|трлн)", re.I)
 _MULTIPLIER_VALUE = {"тыс": 1e3, "млн": 1e6, "млрд": 1e9, "трлн": 1e12}
+_RANGE_GAP = re.compile(r"\s*(?:[-−–—]|до|и)\s*")  # то, что может стоять между краями диапазона
 _TRIVIAL_MAX = 12  # целые до 12 без единицы — счёт, нумерация, месяцы
 MAX_SOURCES_PER_NUMBER = 3
 
@@ -87,6 +88,9 @@ def extract_numbers(text: str, skip_trivial: bool = True) -> list[Num]:
         suffix = _MULTIPLIER.match(masked[m.end():])
         multiplier = _MULTIPLIER_VALUE[suffix.group(1).lower()] if suffix else 1.0
         out.append(Num(text[m.start("num"):m.end("num")], value, decimals, m.start(), m.end(), multiplier))
+    for a, b in zip(out, out[1:]):  # «590–847 тыс.»: множитель стоит один раз, после последнего числа диапазона, но относится к обоим
+        if a.multiplier == 1.0 and b.multiplier != 1.0 and _RANGE_GAP.fullmatch(masked[a.end:b.start]):
+            a.multiplier = b.multiplier
     return out
 
 

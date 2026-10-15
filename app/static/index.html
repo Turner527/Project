@@ -171,8 +171,10 @@
   .eff th, .eff td { padding: 8px 10px; text-align: right; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; vertical-align: top; }
   .eff th { border-top: 0; color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
   .eff th:first-child, .eff td:first-child, .eff th:last-child, .eff td:last-child { text-align: left; }
-  .eff td.pos { color: var(--good); } .eff td.neg { color: var(--bad); }
   .eff tr.alt td { color: var(--muted); }
+  .eff tr td.pos, .eff tr.alt td.pos { color: var(--good); } .eff tr td.neg, .eff tr.alt td.neg { color: var(--bad); }
+  .eff td[data-l] { white-space: nowrap; }
+  .eff td:first-child { overflow-wrap: anywhere; }
   .eff small { display: block; color: var(--muted); font-size: 12px; line-height: 1.4; }
   @media (max-width: 640px) { /* узкий экран: каждая строка таблицы эффектов — маленькая карточка */
     .eff thead { display: none; }
@@ -188,7 +190,9 @@
   .fc-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
   .fc-pick button { font: inherit; font-size: 13px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
   .fc-pick button[aria-pressed="true"] { color: var(--on-soft); background: var(--soft); border-color: var(--soft-line); }
-  .fc-table { overflow: auto; max-height: 300px; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; }
+  .fc-card .d-table { margin-top: 8px; }
+  .tile .lbl, .tile .cap { overflow-wrap: anywhere; }
+  .fc-pick button { max-width: 100%; overflow-wrap: anywhere; }
   h5.sec { margin: 26px 0 10px; font-size: 12.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
   .lead-text { margin: 0 0 10px; font-size: 16.5px; line-height: 1.65; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -925,6 +929,10 @@ function structureTiles(call) {
 
 /* ---------- «что если» и прогноз в ответе: плитки, таблица эффектов, график с интервалом ---------- */
 const TONE = { "лучше": "pos", "хуже": "neg" };
+const FORECAST_COLORS = { "Факт": "var(--s1)", "Со сценарием": "var(--s2)", "Прогноз": "var(--s2)" };
+/* Разность значений: у процентов это процентные пункты; короткая запись как на плитках */
+const shortDiff = (x, unit) => withUnit(Math.abs(x) >= 1e6 ? compact(x) : plain(x, Math.abs(x) >= 100 ? 0 : 2), diffUnit(unit));
+const scopeText = (filter) => (filter ? ` (${Object.entries(filter).map(([k, v]) => `${k}: ${v}`).join(", ")})` : "");
 const RELIABILITY_TONE = { "высокая": "pos", "низкая": "neg" };
 
 function changeText(c, unit) {
@@ -954,11 +962,11 @@ function scenarioBlocks(call) {
     tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, `Прогноз ${key}${d.total ? ": без изменений" : ""}`),
       el("div", { class: "val" }, shortValue(base, first.unit)),
       el("div", { class: "cap" }, total
-        ? `${first.metric} · интервал суммы: ${shortValue(first.horizon_total_low, first.unit)} – ${shortValue(first.horizon_total_high, first.unit)}`
-        : `${first.metric} · интервал ${fc.level_pct}%: ${shortValue(first.low[last], first.unit)} – ${shortValue(first.high[last], first.unit)}`)));
+        ? `${first.metric}${scopeText(d.filter)} · интервал суммы: ${shortValue(first.horizon_total_low, first.unit)} – ${shortValue(first.horizon_total_high, first.unit)}`
+        : `${first.metric}${scopeText(d.filter)} · интервал ${fc.level_pct}%: ${shortValue(first.low[last], first.unit)} – ${shortValue(first.high[last], first.unit)}`)));
     if (scen != null) tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, `Прогноз ${key}: со сценарием`),
       el("div", { class: "val" }, shortValue(scen, first.unit)),
-      el("div", { class: "cap" }, `${first.metric} · разница ${total ? signed(shortValue(first.horizon_total_delta, first.unit), first.horizon_total_delta) : signed(shortValue(first.delta_abs[last], first.unit), first.delta_abs[last])}`)));
+      el("div", { class: "cap" }, `${first.metric}${scopeText(d.filter)} · разница ${total ? signed(shortDiff(first.horizon_total_delta, first.unit), first.horizon_total_delta) : signed(shortDiff(first.delta_abs[last], first.unit), first.delta_abs[last])}`)));
     tiles.push(el("div", { class: "tile" }, el("div", { class: "lbl" }, "Надёжность прогноза"),
       el("div", { class: `val sm ${RELIABILITY_TONE[first.reliability.level] || ""}` }, first.reliability.level),
       el("div", { class: "cap" }, `${first.method} · тренд: ${first.trend.direction}`)));
@@ -1001,11 +1009,11 @@ function effectsTable(d) {
 }
 
 /* Данные для drawTrend: факт, прогноз «без изменений» (пунктир), прогноз со сценарием и интервал базового прогноза */
-function forecastPlot(fc, item) {
+function forecastPlot(fc, item, filter) {
   const h = item.history, n0 = h.values.length, k = item.baseline.length, pad = (len) => Array(Math.max(len, 0)).fill(null);
   const last = h.values[n0 - 1], join = (arr) => [...pad(n0 - 1), last, ...arr];
   const scenario = Array.isArray(item.scenario);
-  return { title: `${item.metric}: факт и прогноз`, unit: item.unit, bucket: fc.bucket, labels: [...h.labels, ...fc.labels], dates: [...h.dates, ...fc.dates],
+  return { title: `${item.metric}${scopeText(filter)}: факт и прогноз`, unit: item.unit, colors: FORECAST_COLORS, noDirect: true, hideEmpty: true, bucket: fc.bucket, labels: [...h.labels, ...fc.labels], dates: [...h.dates, ...fc.dates],
     partial: Array(n0 + k).fill(false), others: 0, marker: null, plan: scenario ? join(item.baseline) : null, planLabel: "Без изменений",
     series: [{ name: "Факт", values: [...h.values, ...pad(k)] }, { name: scenario ? "Со сценарием" : "Прогноз", values: join(scenario ? item.scenario : item.baseline) }],
     band: { low: join(item.low), high: join(item.high), level: fc.level_pct }, divider: { index: n0 - 1, label: "прогноз" } };
@@ -1015,19 +1023,19 @@ function forecastCard(call) {
   const d = call.result, fc = d.forecast, items = fc.metrics;
   const state = { hidden: new Set() };
   const host = el("div", { class: "d-plot" }), legend = el("div", { class: "d-legend" }), picker = el("div", { class: "fc-pick" });
-  const tableHost = el("div", { class: "fc-table" }), reasons = el("div", { class: "d-foot" });
+  const tableHost = el("div", { class: "d-table" }), reasons = el("div", { class: "d-foot" });
   let w = null, current = 0;
   const key = (cls, color, text, extra) => el("span", { class: "it" }, el("i", { class: cls, style: `--k:${color}` }), text, extra || null);
   const draw = () => drawTrend(host, w, state, host.clientWidth || 600);
   function select(i) {
     current = i;
     const item = items[i];
-    w = forecastPlot(fc, item);
-    legend.replaceChildren(key("key", seriesColor("Факт"), "факт"), key("key", seriesColor(w.series[1].name), w.series[1].name.toLowerCase()),
+    w = forecastPlot(fc, item, d.filter);
+    legend.replaceChildren(key("key", FORECAST_COLORS["Факт"], "факт"), key("key", FORECAST_COLORS[w.series[1].name], w.series[1].name.toLowerCase()),
       ...(w.plan ? [key("key dash", "var(--muted)", "без изменений")] : []), key("sw", "var(--muted)", `интервал ${fc.level_pct}% базового прогноза`));
     [...picker.children].forEach((b, k) => b.setAttribute("aria-pressed", String(k === i)));
     reasons.replaceChildren(...[el("p", {}, `Метод: ${item.method}. Надёжность: ${item.reliability.level}.`),
-      ...item.reliability.reasons.slice(0, 3).map((t) => el("p", {}, t)), fc.assumption ? el("p", {}, fc.assumption) : null,
+      ...item.reliability.reasons.slice(0, 6).map((t) => el("p", {}, t)), fc.assumption ? el("p", {}, fc.assumption) : null,
       item.horizon_total_low != null ? el("p", {}, "Интервал суммы за весь горизонт получен сложением границ периодов, поэтому он консервативный: шире, чем 80%.") : null].filter(Boolean));
     const rows = fc.labels.map((label, j) => el("tr", {}, el("td", {}, label), el("td", {}, fullValue(item.baseline[j], item.unit)),
       el("td", {}, `${fullValue(item.low[j], item.unit)} – ${fullValue(item.high[j], item.unit)}`),
@@ -2038,6 +2046,7 @@ function trendTable(w) {
 
 function drawTrend(host, w, state, width) {
   const shown = w.series.filter((s) => !state.hidden.has(s.name));
+  const col = (name) => (w.colors && w.colors[name]) || seriesColor(name); // у графика прогноза цвета закреплены, а не берутся из общей палитры дашборда
   const single = w.series.length === 1;
   const narrow = width < 520;
   const H = narrow ? 240 : 300, W = Math.max(260, Math.round(width));
@@ -2048,7 +2057,7 @@ function drawTrend(host, w, state, width) {
   const ends = shown.map((s) => { const seg = segments(s.values).slice(-1)[0]; return seg ? { s, i: seg[seg.length - 1][0], v: seg[seg.length - 1][1] } : null; })
     .filter(Boolean).sort((a, b) => y(a.v) - y(b.v));
   // имена на концах линий — только если они не наезжают друг на друга; иначе легенда и подсказка
-  const direct = !narrow && !single && ends.length > 0 && ends.length <= 4 && ends.every((e, k) => k === 0 || y(e.v) - y(ends[k - 1].v) >= 14);
+  const direct = !narrow && !single && !w.noDirect && ends.length > 0 && ends.length <= 4 && ends.every((e, k) => k === 0 || y(e.v) - y(ends[k - 1].v) >= 14);
   const m = { t: top, r: direct ? 124 : 18, b: 30, l: 52 };
   const pw = W - m.l - m.r;
   const x = (i) => m.l + (n === 1 ? pw / 2 : (i / (n - 1)) * pw);
@@ -2095,7 +2104,7 @@ function drawTrend(host, w, state, width) {
       fill: "none", style: "stroke:var(--muted)", "stroke-width": 1.6, "stroke-dasharray": "5 4", "stroke-linecap": "round" })));
   }
   for (const s of shown) {
-    const color = seriesColor(s.name), segs = segments(s.values);
+    const color = col(s.name), segs = segments(s.values);
     if (single) {
       for (const seg of segs) {
         const top = seg.map(([i, v], k) => `${k ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join("");
@@ -2131,7 +2140,7 @@ function drawTrend(host, w, state, width) {
   }
 
   const cross = svg("line", { y1: m.t, y2: m.t + ph, style: "stroke:var(--c-axis)", "stroke-width": 1, visibility: "hidden" });
-  const dots = shown.map((s) => svg("circle", { r: 4.5, style: `fill:${seriesColor(s.name)};stroke:var(--c-surface)`, "stroke-width": 2, visibility: "hidden" }));
+  const dots = shown.map((s) => svg("circle", { r: 4.5, style: `fill:${col(s.name)};stroke:var(--c-surface)`, "stroke-width": 2, visibility: "hidden" }));
   root.append(cross, ...dots);
   let current = n - 1;
   function show(i, cx, cy) {
@@ -2143,9 +2152,9 @@ function drawTrend(host, w, state, width) {
       dots[k].setAttribute("visibility", v == null ? "hidden" : "visible");
       if (v != null) { dots[k].setAttribute("cx", px); dots[k].setAttribute("cy", y(v).toFixed(1)); }
     });
-    const rows = shown.map((s) => ({ s, v: s.values[current] })).sort((a, b) => (b.v ?? -Infinity) - (a.v ?? -Infinity));
+    const rows = shown.map((s) => ({ s, v: s.values[current] })).filter(({ v }) => !w.hideEmpty || v != null).sort((a, b) => (b.v ?? -Infinity) - (a.v ?? -Infinity));
     const nodes = [el("div", { class: "th" }, bucketWords(w.bucket, w.labels[current], w.dates[current], true) + (w.partial[current] ? " · неполный период" : "")),
-      ...rows.map(({ s, v }) => tipRow(s.name, fullValue(v, w.unit), seriesColor(s.name)))];
+      ...rows.map(({ s, v }) => tipRow(s.name, fullValue(v, w.unit), col(s.name)))];
     if (w.plan && w.plan[current] != null) nodes.push(tipRow(w.planLabel || "план", fullValue(w.plan[current], w.unit), "var(--muted)", true));
     if (w.band && w.band.low[current] != null) nodes.push(tipRow(`интервал ${w.band.level}%`, `${fullValue(w.band.low[current], w.unit)} – ${fullValue(w.band.high[current], w.unit)}`));
     if (cx == null) { const r = root.getBoundingClientRect(); cx = r.left + (x(current) / W) * r.width; cy = r.top + m.t; }

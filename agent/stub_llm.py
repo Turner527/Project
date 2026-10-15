@@ -55,9 +55,10 @@ _WHATIF = re.compile(r"что\s+(?:будет|получится|станет)[^
                      r"упадёт|упадет|упадут|нарастим)", re.I)
 _FORECAST = re.compile(r"прогноз|каким\s+будет|какой\s+будет|какими\s+будут|что\s+будет\s+(?:с|со|через|дальше)|"
                        r"через\s+(?:\d+|\w+)\s+(?:месяц|недел|дн|квартал)|если\s+ничего\s+не\s+(?:менять|делать|изменится)", re.I)
-_DOWN = re.compile(r"снизим|снизит|снизить|уменьш|сократ|упад|ниже|минус|−|падени|урезать|урежем", re.I)
-_UP = re.compile(r"вырастет|вырастут|увелич|повыс|подним|нарастим|выше|плюс|рост|добавим", re.I)
-_AMOUNT = re.compile(r"(\d+(?:[.,]\d+)?)\s*(%|процент\w*|п\.\s?п\.?|пп\b|пункт\w*)", re.I)
+_DOWN = re.compile(r"(?<!\w)(?:сниз\w*|уменьш\w*|сократ\w*|упад\w*|упаст\w*|падени\w*|урез\w*|урежем|ослаб\w*|минус)", re.I)
+_UP = re.compile(r"(?<!\w)(?:вырас\w*|вырос\w*|увелич\w*|повыс\w*|подним\w*|подняться|нарастим|нараст\w*|добавим|прибавим|плюс|"
+                 r"рост(?:а|у|ом|е)?(?!\w))", re.I)
+_AMOUNT = re.compile(r"(?<![\w.,])([-−–+])?\s?(\d+(?:[.,]\d+)?)\s*(%|процент\w*|п\.\s?п\.?|пп(?!\w)|пункт\w*)", re.I)
 
 
 def _is_whatif(question: str) -> bool:
@@ -69,20 +70,26 @@ def _is_forecast(question: str) -> bool:
 
 
 def _change_args(question: str) -> dict | None:
-    """Величина изменения из вопроса: «на 20%», «на 2 п.п.»; знак по словам «снизим / вырастет». Нет величины — None."""
+    """Величина изменения из вопроса: «на 20%», «на 20 процентов» (проценты) и «на 2 п.п.» (единицы). Знак — явный («−20%»),
+    иначе по ближайшему слову «снизим / вырастет» (слева или справа от числа). Нет величины или направления — None."""
     m = _AMOUNT.search(question)
     if not m:
         return None
-    value = float(m.group(1).replace(",", "."))
-    if _DOWN.search(question) and not _UP.search(question):
-        value = -value
-    elif _DOWN.search(question) and _UP.search(question):  # «вырастет, а потом снизим»: берём слово, ближайшее к числу слева
-        left = question[: m.start()]
-        down = max((x.end() for x in _DOWN.finditer(left)), default=-1)
-        up = max((x.end() for x in _UP.finditer(left)), default=-1)
-        value = -value if down > up else value
-    kind = "abs" if m.group(2).lower().startswith(("п", "пп")) else "pct"
-    return {"change_type": kind, "change_value": value}
+    value = float(m.group(2).replace(",", "."))
+    if m.group(1):
+        value = -value if m.group(1) in "-−–" else value
+    else:
+        def gap(x):  # расстояние от слова до числа
+            return min(abs(x.start() - m.end()), abs(m.start() - x.end()))
+
+        down = min((gap(x) for x in _DOWN.finditer(question)), default=None)
+        up = min((gap(x) for x in _UP.finditer(question)), default=None)
+        if down is None and up is None:
+            return None
+        if up is None or (down is not None and down < up):
+            value = -value
+    unit = m.group(3).lower()
+    return {"change_type": "pct" if unit.startswith(("%", "процент")) else "abs", "change_value": value}
 
 
 def _dashboard_context(messages: list) -> dict | None:
@@ -259,6 +266,11 @@ class ScriptedLLM:
 
     # --- «что если» и прогноз: записка целиком из результата инструмента ---
     @staticmethod
+    def _du(unit: str) -> str:
+        """Единица разности: у процентных показателей это процентные пункты."""
+        return " п.п." if unit == "%" else _u(unit)
+
+    @staticmethod
     def _ln(name: str, unit: str, d: dict) -> str:
         pct = "н/д" if d.get("delta_pct") is None else f"{_fmt(d['delta_pct'], True)}%"
         return f"{name}: {_fmt(d['before'])}{_u(unit)} → {_fmt(d['after'])}{_u(unit)} ({pct}, {d['verdict']})"
@@ -269,7 +281,7 @@ class ScriptedLLM:
         if "horizon_total_baseline" in item:  # сумма за горизонт: интервал тоже для суммы, а не для последнего периода
             text = f"{item['metric']}: за {fc['horizon']} {fc['unit_word']} без изменений {_fmt(item['horizon_total_baseline'])}{u}"
             if with_scenario and "horizon_total_scenario" in item:
-                text += f", со сценарием {_fmt(item['horizon_total_scenario'])}{u} (разница {_fmt(item['horizon_total_delta'], True)}{u})"
+                text += f", со сценарием {_fmt(item['horizon_total_scenario'])}{u} (разница {_fmt(item['horizon_total_delta'], True)}{ScriptedLLM._du(item['unit'])})"
             low, high = item["horizon_total_low"], item["horizon_total_high"]
             tail = f"интервал суммы для базового прогноза {_fmt(low)}–{_fmt(high)}{u} (границы периодов сложены, интервал консервативный)"
         else:

@@ -634,7 +634,10 @@ def test_состав_ответа():
                         "filled", "backtest", "trend", "reliability"}
     assert set(res["backtest"]) == {"folds", "mae", "rmse", "mape_pct"}
     assert set(res["trend"]) == {"slope_per_period", "direction"}
-    assert set(res["reliability"]) == {"level", "reasons"}
+    assert set(res["reliability"]) == {"level", "reasons", "numbers"}
+    # числа из причин лежат отдельным списком: верификатор сверяет ответ с числовыми полями, а не со строками
+    assert set(F._numbers_in(res["reliability"]["reasons"])) <= set(res["reliability"]["numbers"])
+    assert F._numbers_in(["история 30 периодов (не меньше 24)", "ошибка 5,8%"]) == [30.0, 24.0, 5.8]
     assert res["history_n"] == 14 and res["filled"] == 0
     assert F.LEVEL == 0.8 and F.MIN_POINTS == 6
 
